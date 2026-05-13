@@ -30,7 +30,6 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
   const { project } = useWizardStore();
   const projectId = project?.id ?? null;
 
-  const [started, setStarted] = useState(true); // pipeline đã được resume từ StepSceneBreakdown
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pipelineMsg, setPipelineMsg] = useState("");
 
