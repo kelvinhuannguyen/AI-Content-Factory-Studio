@@ -159,14 +159,16 @@ async def get_pipeline_state(project_id: uuid.UUID, db: AsyncSession = Depends(g
     """
     await _get_project_or_404(project_id, db)
 
-    graph = await get_graph()
-    config = get_thread_config(str(project_id))
-    state = await graph.aget_state(config)
-
-    if not state or not state.values:
-        return {"status": "not_started", "current_stage": None, "paused_at": None}
-
-    return _pipeline_response(state)
+    try:
+        graph = await get_graph()
+        config = get_thread_config(str(project_id))
+        state = await graph.aget_state(config)
+        if not state or not state.values:
+            return {"status": "not_started", "current_stage": None, "paused_at": None}
+        return _pipeline_response(state)
+    except Exception as e:
+        logger.error("Pipeline state error for %s: %s", project_id, e)
+        return {"status": "not_started", "current_stage": None, "paused_at": None, "langgraph_error": str(e)}
 
 
 @router.delete("/{project_id}/reset", status_code=204)

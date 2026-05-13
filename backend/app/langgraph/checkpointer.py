@@ -28,15 +28,13 @@ async def get_checkpointer() -> AsyncRedisSaver:
     global _checkpointer
     if _checkpointer is None:
         redis_url = _get_redis_url()
-        connection_args: dict = {}
+        # redis-py handles rediss:// SSL automatically; pass ssl_cert_reqs to skip verify
+        kwargs: dict = {}
         if redis_url.startswith("rediss://"):
-            ssl_ctx = ssl.create_default_context()
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
-            connection_args["ssl"] = ssl_ctx
+            kwargs = {"ssl_cert_reqs": "none"}
         _checkpointer = AsyncRedisSaver(
             redis_url=redis_url,
-            connection_args=connection_args,
+            **kwargs,
         )
         await _checkpointer.asetup()
     return _checkpointer
