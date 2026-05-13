@@ -1,9 +1,10 @@
 """Pipeline API — khởi động và điều khiển LangGraph Multi-Agent workflow."""
 from __future__ import annotations
 import uuid
+import asyncio
 import logging
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from langgraph.types import Command
@@ -58,7 +59,7 @@ async def _get_project_or_404(project_id: uuid.UUID, db: AsyncSession) -> Projec
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/{project_id}/start", status_code=202)
-async def start_pipeline(project_id: uuid.UUID, body: Optional[dict] = Body(default=None), db: AsyncSession = Depends(get_db)):
+async def start_pipeline(project_id: uuid.UUID, background_tasks: BackgroundTasks, body: Optional[dict] = Body(default=None), db: AsyncSession = Depends(get_db)):
     """
     Khởi động LangGraph pipeline cho một project.
     Graph chạy từ screenwriter_node → interrupt tại script_review.
@@ -91,20 +92,21 @@ async def start_pipeline(project_id: uuid.UUID, body: Optional[dict] = Body(defa
         character_name=character_name,
     )
 
-    # Chạy graph (sẽ dừng tại interrupt đầu tiên trong script_review_node)
-    try:
-        result = await graph.ainvoke(state, config=config)
-        final_state = await graph.aget_state(config)
-        return _pipeline_response(final_state)
-    except Exception as e:
-        logger.error("Pipeline start error for %s: %s", project_id, e)
-        raise HTTPException(500, f"Pipeline error: {e}")
+    async def _run_start():
+        try:
+            await graph.ainvoke(state, config=config)
+        except Exception as e:
+            logger.error("Pipeline start background error for %s: %s", project_id, e)
+
+    background_tasks.add_task(_run_start)
+    return {"status": "starting", "project_id": str(project_id)}
 
 
-@router.post("/{project_id}/resume")
+@router.post("/{project_id}/resume", status_code=202)
 async def resume_pipeline(
     project_id: uuid.UUID,
     body: dict,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -142,13 +144,14 @@ async def resume_pipeline(
     else:
         raise HTTPException(422, f"Unknown step '{step}'. Valid: 'script', 'character', 'scene'")
 
-    try:
-        await graph.ainvoke(Command(resume=resume_value), config=config)
-        final_state = await graph.aget_state(config)
-        return _pipeline_response(final_state)
-    except Exception as e:
-        logger.error("Pipeline resume error for %s: %s", project_id, e)
-        raise HTTPException(500, f"Pipeline resume error: {e}")
+    async def _run_resume():
+        try:
+            await graph.ainvoke(Command(resume=resume_value), config=config)
+        except Exception as e:
+            logger.error("Pipeline resume background error for %s: %s", project_id, e)
+
+    background_tasks.add_task(_run_resume)
+    return {"status": "resuming", "step": step, "project_id": str(project_id)}
 
 
 @router.get("/{project_id}/state")
