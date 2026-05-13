@@ -44,8 +44,6 @@ async def generate_video_clip(
         "model": model,
         "prompt": prompt,
         "duration": api_duration,
-        "aspect_ratio": aspect_ratio,
-        "n": 1,
     }
 
     async with httpx.AsyncClient(timeout=30) as client:

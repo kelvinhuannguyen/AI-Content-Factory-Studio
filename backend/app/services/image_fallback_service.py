@@ -37,9 +37,6 @@ async def _kymaapi_generate(prompt: str) -> bytes:
     payload = {
         "model": settings.kymaapi_image_model,  # flux-1.1-ultra
         "prompt": prompt,
-        "n": 1,
-        "size": "768x1024",
-        "response_format": "url",
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
@@ -77,6 +74,7 @@ async def _poll_job(job_id: str, headers: dict) -> bytes:
                     url = (
                         output.get("url")
                         or (output.get("images") or [{}])[0].get("url")
+                        or (output.get("data") or [{}])[0].get("url")
                     )
                     if url:
                         return await _download_url(url)
