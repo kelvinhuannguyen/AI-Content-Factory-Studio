@@ -9,7 +9,7 @@
   "rewrites": [
     {
       "source": "/api/v1/:path*",
-      "destination": "https://your-backend.railway.app/api/v1/:path*"
+      "destination": "https://ai-content-factory-studio-production.up.railway.app/api/v1/:path*"
     }
   ]
 }
