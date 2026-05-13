@@ -1,0 +1,24 @@
+fastapi==0.115.5
+uvicorn[standard]==0.32.0
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+redis==5.2.0
+celery[redis]==5.4.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+python-multipart==0.0.18
+httpx==0.28.0
+boto3==1.35.76
+python-dotenv==1.0.1
+google-api-python-client==2.155.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.1
+python-telegram-bot==21.9
+pillow==11.0.0
+aiofiles==24.1.0
+tenacity==9.0.0
+orjson==3.10.12
+# LangGraph Multi-Agent Orchestration
+langgraph>=1.2.0
+langgraph-checkpoint-redis>=0.4.0

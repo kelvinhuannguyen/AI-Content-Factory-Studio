@@ -1,0 +1,71 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "create": "Create",
+    "queue": "Queue",
+    "analytics": "Analytics",
+    "settings": "Settings"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "stats": {
+      "totalProjects": "Total Projects",
+      "published": "Published",
+      "inProgress": "In Progress",
+      "thisMonth": "This Month"
+    },
+    "recentProjects": "Recent Projects",
+    "quickStart": "Quick Start",
+    "noProjects": "No projects yet"
+  },
+  "create": {
+    "title": "Choose Production Type",
+    "shortVideo": {
+      "title": "Short Video",
+      "description": "Reels, YouTube Shorts, TikTok (15s – 60s)"
+    },
+    "longVideo": {
+      "title": "Long Video",
+      "description": "YouTube standard, Documentary (3 – 30 min)"
+    },
+    "musicMv": {
+      "title": "Music MV",
+      "description": "Music Video with Suno AI (no duration limit)"
+    }
+  },
+  "wizard": {
+    "back": "Back",
+    "next": "Next",
+    "save": "Save",
+    "approve": "Approve",
+    "reject": "Reject",
+    "regenerate": "Regenerate",
+    "generate": "Generate",
+    "generating": "Generating...",
+    "step": "Step"
+  },
+  "status": {
+    "draft": "Draft",
+    "generating": "Generating",
+    "published": "Published",
+    "failed": "Failed"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "download": "Download",
+    "upload": "Upload",
+    "close": "Close",
+    "lightMode": "Light Mode",
+    "darkMode": "Dark Mode",
+    "systemMode": "System"
+  }
+}

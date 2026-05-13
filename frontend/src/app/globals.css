@@ -1,0 +1,145 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ── Light mode — trắng dịu, shadow thay border ─────────────────── */
+  :root {
+    --background: 220 20% 97%;            /* #f4f5f7 — xám trắng rất nhẹ */
+    --foreground: 220 25% 10%;            /* gần đen, không harsh */
+
+    --card: 0 0% 100%;                    /* card = trắng tinh */
+    --card-foreground: 220 25% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 25% 10%;
+
+    --primary: 262.1 75% 52%;             /* violet đậm hơn chút */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 93%;
+    --secondary-foreground: 220 20% 20%;
+
+    --muted: 220 15% 93%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 262 80% 96%;               /* violet rất nhạt */
+    --accent-foreground: 262 75% 40%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 89%;               /* border nhạt, gần như ẩn */
+    --input: 220 15% 89%;
+    --ring: 262.1 75% 52%;
+
+    --highlight: 262.1 75% 52%;
+    --radius: 0.875rem;
+
+    /* Sidebar */
+    --sidebar-bg: 0 0% 100%;
+    --sidebar-border: 220 15% 91%;
+    --sidebar-item-hover: 262 60% 96%;
+    --sidebar-item-active: 262 70% 93%;
+    --sidebar-item-active-text: 262 75% 38%;
+
+    /* Shadow tokens for card depth */
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
+    --shadow-md: 0 4px 12px 0 rgb(0 0 0 / 0.07), 0 2px 4px -1px rgb(0 0 0 / 0.04);
+    --shadow-lg: 0 8px 24px 0 rgb(0 0 0 / 0.09), 0 4px 8px -2px rgb(0 0 0 / 0.05);
+  }
+
+  /* ── Dark mode — đen sâu, tương phản rõ ─────────────────────────── */
+  .dark {
+    --background: 224 28% 6%;             /* #0a0c14 — đen xanh rất sâu */
+    --foreground: 220 20% 94%;            /* trắng ấm */
+
+    --card: 224 24% 9%;                   /* #10131e — card đen hơi xanh */
+    --card-foreground: 220 20% 94%;
+
+    --popover: 224 24% 9%;
+    --popover-foreground: 220 20% 94%;
+
+    --primary: 263 85% 72%;              /* violet sáng hơn trên nền đen */
+    --primary-foreground: 224 28% 6%;
+
+    --secondary: 224 20% 14%;
+    --secondary-foreground: 220 15% 80%;
+
+    --muted: 224 20% 13%;
+    --muted-foreground: 220 12% 52%;
+
+    --accent: 224 20% 14%;
+    --accent-foreground: 220 15% 80%;
+
+    --destructive: 0 65% 55%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 224 18% 15%;              /* border rất tối, tinh tế */
+    --input: 224 18% 15%;
+    --ring: 263 85% 72%;
+
+    --highlight: 186 90% 62%;           /* cyan — điểm nhấn trên đen */
+    --radius: 0.875rem;
+
+    /* Sidebar */
+    --sidebar-bg: 224 30% 5%;
+    --sidebar-border: 224 18% 12%;
+    --sidebar-item-hover: 263 30% 13%;
+    --sidebar-item-active: 263 40% 18%;
+    --sidebar-item-active-text: 263 80% 78%;
+
+    /* Shadow tokens (ít dùng trên dark) */
+    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 12px 0 rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 8px 24px 0 rgb(0 0 0 / 0.5);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* ── Card với shadow thay vì border nặng (light mode) ───────────── */
+@layer utilities {
+  .card-shadow {
+    box-shadow: var(--shadow-sm);
+  }
+  .card-shadow-md {
+    box-shadow: var(--shadow-md);
+  }
+  .card-shadow-lg {
+    box-shadow: var(--shadow-lg);
+  }
+}
+
+/* ── Custom scrollbar — mỏng, tinh tế ──────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
+::-webkit-scrollbar-thumb:hover { opacity: 0.8; }
+
+/* ── Animations ─────────────────────────────────────────────────────── */
+@keyframes progress-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.progress-indeterminate {
+  animation: progress-indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out both;
+}

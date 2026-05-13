@@ -1,0 +1,83 @@
+"""Shared LangGraph state for the AI Content Factory production pipeline."""
+from __future__ import annotations
+from typing import TypedDict, Optional
+
+
+class ProductionState(TypedDict):
+    # ── Project context (set once at start, immutable) ────────────────────
+    project_id: str
+    production_type: str        # "short_video" | "long_video" | "music_mv"
+    topic: str
+    genre: str
+    style: str
+    duration_seconds: int
+    language: str               # "vi" | "en"
+
+    # ── Agent Screenwriter ────────────────────────────────────────────────
+    script_id: Optional[str]          # UUID của Script row trong DB
+    script_content: Optional[str]     # content_raw (plain text kịch bản)
+    script_html: Optional[str]        # content_html (Tiptap editor format)
+    script_approved: bool             # kết quả duyệt từ human interrupt
+
+    # ── Agent Character Designer ──────────────────────────────────────────
+    character_description: Optional[str]
+    character_name: Optional[str]
+    characters: list[dict]            # [{id, variant_index, image_r2_key, image_url}]
+    selected_character_id: Optional[str]
+    character_approved: bool          # kết quả duyệt từ human interrupt
+
+    # ── Video Pipeline (Sprint 5+) ────────────────────────────────────────
+    scenes: list[dict]                # [{id, scene_number, video_prompt, duration_seconds}]
+    video_clips: list[dict]           # [{scene_id, clip_r2_key, status}]
+    voiceover_r2_key: Optional[str]
+    final_video_r2_key: Optional[str]
+
+    # ── Control ───────────────────────────────────────────────────────────
+    current_stage: str                # tên node hiện tại
+    error: Optional[str]
+    approval_status: str              # "pending" | "approved" | "rejected"
+    rejection_notes: Optional[str]
+
+
+def initial_state(
+    project_id: str,
+    production_type: str = "short_video",
+    topic: str = "",
+    genre: str = "",
+    style: str = "",
+    duration_seconds: int = 60,
+    language: str = "vi",
+    character_description: str = "",
+    character_name: str = "",
+) -> ProductionState:
+    """Build the initial ProductionState from a project's basic metadata."""
+    return ProductionState(
+        project_id=project_id,
+        production_type=production_type,
+        topic=topic,
+        genre=genre,
+        style=style,
+        duration_seconds=duration_seconds,
+        language=language,
+        # Screenwriter
+        script_id=None,
+        script_content=None,
+        script_html=None,
+        script_approved=False,
+        # Character Designer
+        character_description=character_description,
+        character_name=character_name,
+        characters=[],
+        selected_character_id=None,
+        character_approved=False,
+        # Video Pipeline
+        scenes=[],
+        video_clips=[],
+        voiceover_r2_key=None,
+        final_video_r2_key=None,
+        # Control
+        current_stage="start",
+        error=None,
+        approval_status="pending",
+        rejection_notes=None,
+    )

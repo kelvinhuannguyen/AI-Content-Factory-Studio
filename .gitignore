@@ -1,0 +1,54 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+backend/venv/
+backend/.venv/
+venv/
+
+# Secrets — NEVER commit
+backend/.env
+.env
+*.env
+
+# Credentials
+backend/credentials/
+!backend/credentials/.gitignore
+
+# Node
+frontend/node_modules/
+node_modules/
+
+# Next.js build
+frontend/.next/
+frontend/out/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Media uploads
+backend/uploads/
+backend/media/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/

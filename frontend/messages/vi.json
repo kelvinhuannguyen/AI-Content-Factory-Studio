@@ -1,0 +1,71 @@
+{
+  "nav": {
+    "dashboard": "Tổng quan",
+    "projects": "Dự án",
+    "create": "Tạo mới",
+    "queue": "Hàng đợi",
+    "analytics": "Phân tích",
+    "settings": "Cài đặt"
+  },
+  "dashboard": {
+    "title": "Tổng quan",
+    "stats": {
+      "totalProjects": "Tổng dự án",
+      "published": "Đã đăng",
+      "inProgress": "Đang xử lý",
+      "thisMonth": "Tháng này"
+    },
+    "recentProjects": "Dự án gần đây",
+    "quickStart": "Bắt đầu nhanh",
+    "noProjects": "Chưa có dự án nào"
+  },
+  "create": {
+    "title": "Chọn loại sản xuất",
+    "shortVideo": {
+      "title": "Video ngắn",
+      "description": "Reels, YouTube Shorts, TikTok (15s – 60s)"
+    },
+    "longVideo": {
+      "title": "Video dài",
+      "description": "YouTube standard, Documentary (3 – 30 phút)"
+    },
+    "musicMv": {
+      "title": "MV ca nhạc",
+      "description": "Music Video với Suno AI (không giới hạn thời lượng)"
+    }
+  },
+  "wizard": {
+    "back": "Quay lại",
+    "next": "Tiếp theo",
+    "save": "Lưu",
+    "approve": "Duyệt",
+    "reject": "Từ chối",
+    "regenerate": "Tạo lại",
+    "generate": "Tạo",
+    "generating": "Đang tạo...",
+    "step": "Bước"
+  },
+  "status": {
+    "draft": "Nháp",
+    "generating": "Đang tạo",
+    "published": "Đã đăng",
+    "failed": "Lỗi"
+  },
+  "common": {
+    "loading": "Đang tải...",
+    "error": "Có lỗi xảy ra",
+    "retry": "Thử lại",
+    "cancel": "Huỷ",
+    "confirm": "Xác nhận",
+    "save": "Lưu",
+    "delete": "Xoá",
+    "edit": "Chỉnh sửa",
+    "view": "Xem",
+    "download": "Tải xuống",
+    "upload": "Tải lên",
+    "close": "Đóng",
+    "lightMode": "Chế độ sáng",
+    "darkMode": "Chế độ tối",
+    "systemMode": "Theo hệ thống"
+  }
+}
