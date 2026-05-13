@@ -13,6 +13,83 @@ import uuid
 from celery import group, chord
 from .celery_app import celery_app
 
+
+class _MockTask:
+    """Fake Celery task context — used when running tasks inline without a worker."""
+    def __init__(self):
+        self.request = type("_req", (), {"id": str(uuid.uuid4())})()
+
+
+async def run_production_pipeline_inline(project_id: str, music_key: str | None = None) -> None:
+    """
+    Run the full production pipeline inline (no Celery worker needed).
+    Called from video_generator_node which runs inside a FastAPI BackgroundTask.
+    Sequence: video clips (sequential) → voiceover → assemble.
+    """
+    from ..database import AsyncSessionLocal
+    from ..models.scene import Scene
+    from ..models.script import Script
+    from ..models.project import Project, ProjectStatus
+    from ..services.sse_service import publish_event
+    from .video_tasks import _generate_clip_async
+    from .tts_tasks import _tts_async
+    from .assembly_tasks import _assemble_async
+    from sqlalchemy import select
+
+    pid = uuid.UUID(project_id)
+
+    await publish_event(project_id, {"type": "pipeline_start", "message": "Đang khởi động pipeline tạo video..."})
+
+    async with AsyncSessionLocal() as db:
+        scene_result = await db.execute(select(Scene).where(Scene.project_id == pid).order_by(Scene.scene_number))
+        scenes = scene_result.scalars().all()
+
+        script_result = await db.execute(select(Script).where(Script.project_id == pid).order_by(Script.version.desc()))
+        script = script_result.scalars().first()
+        narration_text = (script.content_raw or "") if script else ""
+
+        proj = await db.get(Project, pid)
+        language = proj.preferred_language if proj else "vi"
+        aspect_ratio = "9:16" if proj and str(proj.production_type) == "short_video" else "16:9"
+        if proj:
+            proj.status = ProjectStatus.generating
+        await db.commit()
+
+    if not scenes:
+        await publish_event(project_id, {"type": "pipeline_error", "error": "Không có cảnh nào để tạo video."})
+        return
+
+    await publish_event(project_id, {
+        "type": "pipeline_queued",
+        "scene_count": len(scenes),
+        "message": f"Đang tạo {len(scenes)} clip + giọng đọc...",
+    })
+
+    # Generate video clips sequentially
+    for scene in scenes:
+        try:
+            await _generate_clip_async(
+                _MockTask(), project_id, str(scene.id),
+                scene.video_prompt or f"Scene {scene.scene_number}: {scene.description or scene.title or ''}",
+                scene.duration_seconds or 5, aspect_ratio,
+            )
+        except Exception as e:
+            logger.error("Clip failed scene %s: %s", scene.id, e)
+
+    # Generate voiceover
+    voiceover_key: str | None = None
+    try:
+        voiceover_key = await _tts_async(_MockTask(), project_id, narration_text, language)
+    except Exception as e:
+        logger.error("Voiceover failed: %s", e)
+
+    # Assemble final video
+    try:
+        await _assemble_async(_MockTask(), project_id, [], voiceover_key, music_key)
+    except Exception as e:
+        logger.error("Assembly failed: %s", e)
+        await publish_event(project_id, {"type": "pipeline_error", "error": str(e)})
+
 logger = logging.getLogger(__name__)
 
 

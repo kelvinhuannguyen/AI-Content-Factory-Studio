@@ -27,14 +27,11 @@ async def video_generator_node(state: ProductionState) -> dict:
     music_key: str | None = None
 
     try:
-        from ...tasks.pipeline_tasks import launch_production_pipeline
-        launch_production_pipeline.apply_async(
-            kwargs={"project_id": project_id, "music_key": music_key},
-            queue="cpu_queue",
-        )
-        logger.info("Production pipeline launched via LangGraph for project %s", project_id)
+        from ...tasks.pipeline_tasks import run_production_pipeline_inline
+        await run_production_pipeline_inline(project_id, music_key=music_key)
+        logger.info("Production pipeline complete for project %s", project_id)
     except Exception as e:
-        logger.error("Failed to launch pipeline: %s", e)
+        logger.error("Failed to run pipeline: %s", e)
         await publish_event(project_id, {"type": "agent_error", "agent": "video_generator", "error": str(e)})
         return {"error": str(e), "current_stage": "video_generator"}
 
