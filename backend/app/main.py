@@ -40,15 +40,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+_CORS_ORIGINS = [
+    settings.frontend_url,
+    "https://ai-content-factory-studio.vercel.app",
+    "https://ai-content-factory-studio-git-main-kelvnhuannguyen.vercel.app",
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.frontend_url,
-        "https://ai-content-factory-studio.vercel.app",
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-    ],
+    allow_origins=_CORS_ORIGINS,
+    allow_origin_regex=r"https://ai-content-factory-studio.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
