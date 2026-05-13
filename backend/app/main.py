@@ -44,6 +44,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         settings.frontend_url,
+        "https://ai-content-factory-studio.vercel.app",
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3002",
