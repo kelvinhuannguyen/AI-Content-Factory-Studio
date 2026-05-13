@@ -37,25 +37,17 @@ async def character_designer_node(state: ProductionState) -> dict:
         "message": "Đang khởi tạo tạo nhân vật...",
     })
 
-    # Trigger Celery task
+    # Generate characters directly (no Celery worker needed — runs inline in BackgroundTask)
     try:
-        from ...tasks.character_tasks import generate_character_variants
-        generate_character_variants.apply_async(
-            kwargs={
-                "project_id": project_id,
-                "description": description,
-                "name": name,
-                "ref_r2_key": None,
-            },
-            queue="cpu_queue",
-        )
-        logger.info("Character Celery task submitted for project %s", project_id)
+        from ...tasks.character_tasks import _generate_variants_async
+        await _generate_variants_async(None, project_id, description, name, None)
+        logger.info("Character generation complete for project %s", project_id)
     except Exception as e:
-        logger.error("Failed to submit character Celery task: %s", e)
+        logger.error("Character generation failed: %s", e)
         await publish_event(project_id, {"type": "agent_error", "agent": "character_designer", "error": str(e)})
         return {"error": str(e), "current_stage": "character_designer"}
 
-    # Poll DB until 3 characters are ready
+    # Query DB for the generated characters (with R2 URLs)
     characters = await _wait_for_characters(project_id)
 
     if not characters:

@@ -1,3 +1,4 @@
+import ssl
 from celery import Celery
 from ..config import get_settings
 
@@ -18,6 +19,8 @@ celery_app = Celery(
     ],
 )
 
+_redis_ssl = {"ssl_cert_reqs": ssl.CERT_NONE}
+
 celery_app.conf.update(
     task_serializer="json",
     accept_content=["json"],
@@ -27,6 +30,8 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
+    broker_use_ssl=_redis_ssl if settings.redis_url.startswith("rediss://") else None,
+    redis_backend_use_ssl=_redis_ssl if settings.redis_url.startswith("rediss://") else None,
     task_routes={
         "app.tasks.character_tasks.*": {"queue": "gpu_queue"},
         "app.tasks.video_tasks.*": {"queue": "gpu_queue"},
