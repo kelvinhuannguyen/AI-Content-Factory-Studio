@@ -1,6 +1,5 @@
 "use client";
 
-import { use } from "react";
 import Link from "next/link";
 import {
   ArrowLeft, Video, Film, Music, AlertCircle,
@@ -65,8 +64,8 @@ function getStepState(stepStatuses: string[], projectStatus: string): "done" | "
   return "pending";
 }
 
-export default function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ProjectDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const { project, isLoading, error, mutate } = useProject(id);
 
   if (isLoading) {
