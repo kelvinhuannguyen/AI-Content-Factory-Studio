@@ -23,3 +23,9 @@ class Shot(UUIDBase):
     qc_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="APPROVED")
     clip_r2_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    # ── Continuity Director fields (Migration 006) ────────────────────────
+    continuity_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sfx_prompt:       Mapped[str | None] = mapped_column(Text, nullable=True)
+    ambience:         Mapped[str | None] = mapped_column(String(500), nullable=True)
+    motion_intensity: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -445,4 +445,127 @@ Return JSON:
       "status": "APPROVED"
     }}
   ]
-}}
+}}"""
+
+
+# ── Sequence Continuity & Motion Coherence Director ───────────────────────────
+CONTINUITY_DIRECTOR_SYSTEM = """You are a Sequence Continuity & Motion Coherence Director for an AI video production pipeline.
+You receive a full ordered list of APPROVED cinematic shots and must perform four tasks simultaneously across the entire sequence.
+Output ONLY a single valid JSON object. No markdown, no explanation outside the JSON.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK 1 — BRIDGE LOGIC (Shot-Pair Analysis)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For every consecutive shot pair (n-1 → n):
+- Determine the END STATE of shot n-1: character position (left/center/right frame), facing direction, camera angle, last visible action.
+- Write a continuity_notes instruction for shot n that anchors its STARTING FRAME to the end state of n-1.
+- 180° Rule: If consecutive shots contain the same characters, verify they stay on the same side of the 180° axis. Flag and correct violations by specifying "match 180° axis from previous shot".
+- POV Cut Rule: If shot n-1 ends on a character's eyes or gaze direction, shot n's continuity_notes must specify a POV frame ("POV from #CHAR_01 eyeline — show what they see").
+- First shot of sequence: continuity_notes = establish the opening spatial anchor (e.g. "Opening shot. Fade in from black. Establish spatial anchor: #CHAR_01 left frame.").
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK 2 — GLOBAL STYLE ANCHOR
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Scan ALL shots as a set:
+- Identify the dominant style token (e.g. "cinematic 35mm grain", "neon cyberpunk", "Unreal Engine 5"). Flag any shot whose prompt uses a contradicting style token in continuity_notes.
+- Color temperature: shots within the same scene must share a consistent color temperature (warm/cool/neutral). Flag cross-scene mismatches only if jarring.
+- Camera vocabulary: within each scene, camera moves must form a coherent grammar. Flag incoherent sequences in continuity_notes.
+- Do NOT rewrite prompts — only write continuity_notes that address issues found.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK 3 — AUDIO BLUEPRINT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For every shot, produce:
+- sfx_prompt: Specific Foley sounds for this exact 8-second clip. Be concrete and physical: "heavy leather boots on wet cobblestone, distant crowd murmur, wind through pine trees". Never vague ("action sounds", "background noise").
+- ambience: Environmental background layer in ≤ 500 characters: "Rainy alleyway, neon city district, distant traffic hum, occasional police siren two blocks away."
+- sfx_prompt and ambience must be consistent within the same scene location. If characters move environments mid-sequence, transition the audio accordingly.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TASK 4 — MOTION VECTOR & PACING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For every shot, assign motion_intensity (integer 0-10):
+  0-1 = locked camera, completely static scene (title card, still portrait)
+  2-3 = subtle movement (gentle push-in, slow pan, character breathes)
+  4-5 = moderate action (walking, slow camera track, mid-paced dialogue)
+  6-7 = active scene (running, fast pan, chase begins, handheld)
+  8-9 = high intensity (fight, rapid cutting, shaky cam, explosion proximity)
+  10  = maximum chaos (full sprint chase, handheld running, debris flying)
+Pacing logic: motion_intensity values across the sequence must tell a coherent story arc. Flag anomalies (e.g. intensity 9 surrounded by intensity 2 with no narrative reason) in continuity_notes.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT SCHEMA (return exactly this, nothing else):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+{
+  "sequence_id": "SEQ_001_<project_uuid>",
+  "total_duration": "<Ns>",
+  "motion_intensity_avg": <float 0-10, mean across all shots rounded to 1 decimal>,
+  "workflow_steps": [
+    {
+      "clip_id": "<shot_id e.g. SC01_SH01>",
+      "video_prompt": "[CONTINUITY: <one instruction line>] <original prompt verbatim after this>",
+      "continuity_notes": "<bridge logic + style anchor notes for this shot>",
+      "sfx_prompt": "<specific Foley sounds>",
+      "ambience": "<environmental background ≤500 chars>",
+      "motion_intensity": <integer 0-10>
+    }
+  ]
+}
+
+GUARDRAILS:
+- video_prompt must be: "[CONTINUITY: <one instruction line>] " prepended to the ORIGINAL prompt verbatim. Do not alter original prompt tokens.
+- continuity_notes for shot n must reference the previous shot_id by name (e.g. "Match #CHAR_01 position from SC01_SH01.").
+- Never invent characters not present in characters_present.
+- motion_intensity must be an integer, never a float.
+- ambience must be ≤ 500 characters.
+- If two shots share the same scene_id prefix (SC01), their sfx/ambience should be variations of the same environment unless the script requires a location change."""
+
+
+def continuity_director_user(
+    shots: list[dict],
+    lookbook: dict,
+    genre: str,
+    style: str,
+    project_id: str,
+) -> str:
+    """Build the user prompt for the Continuity Director — full sequence context."""
+    total_duration = sum(s.get("duration", 8) for s in shots)
+
+    shots_block = ""
+    for i, s in enumerate(shots):
+        shots_block += (
+            f"\n[SHOT {i + 1}] {s.get('shot_id', f'SHOT_{i + 1}')}\n"
+            f"  Scene: {s.get('scene_id', 'unknown')}\n"
+            f"  Duration: {s.get('duration', 8)}s\n"
+            f"  Characters: {s.get('characters_present', [])}\n"
+            f"  Prompt: {s.get('prompt', '')}\n"
+        )
+
+    char_block = ""
+    for ref_id, data in lookbook.items():
+        char_block += (
+            f"  {ref_id} ({data.get('name', ref_id)}): "
+            f"{data.get('key_identifier', '')} | "
+            f"constant: {', '.join(data.get('constant_elements', []))}\n"
+        )
+    if not char_block:
+        char_block = "  (no named characters — narration/environmental sequence)\n"
+
+    return f"""Analyze this complete shot sequence and produce the Master Render List.
+
+PROJECT: {project_id}
+GENRE: {genre} | STYLE: {style}
+TOTAL SHOTS: {len(shots)} | TOTAL DURATION: {total_duration}s
+
+CHARACTER LOOKBOOK (spatial/visual anchors for continuity):
+{char_block}
+ORDERED SHOT SEQUENCE:
+{shots_block}
+Instructions:
+1. Process ALL {len(shots)} shots — do not skip any.
+2. workflow_steps array must have exactly {len(shots)} entries, in the same order.
+3. Each clip_id must exactly match the shot_id field shown above.
+4. sequence_id = "SEQ_001_{project_id}"
+5. total_duration = "{total_duration}s"
+6. Compute motion_intensity_avg as arithmetic mean of all motion_intensity values, rounded to 1 decimal.
+
+Return ONLY the JSON object. No preamble, no explanation."""

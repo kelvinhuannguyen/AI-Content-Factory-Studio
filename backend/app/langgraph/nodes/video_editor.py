@@ -148,10 +148,12 @@ async def video_editor_node(state: ProductionState) -> dict:
     async def _do_bgm():
         nonlocal bgm_key
         try:
-            bgm_bytes = await generate_bgm(genre, style, total_duration)
+            continuity_manifest = state.get("continuity_manifest") or {}
+            motion_avg = continuity_manifest.get("motion_intensity_avg")
+            bgm_bytes = await generate_bgm(genre, style, total_duration, motion_intensity_avg=motion_avg)
             bgm_key = f"projects/{project_id}/bgm.mp3"
             await upload_bytes(bgm_key, bgm_bytes, content_type="audio/mpeg")
-            logger.info("BGM generated: %s", bgm_key)
+            logger.info("BGM generated: %s (motion_avg=%s)", bgm_key, motion_avg)
         except (BGMError, Exception) as e:
             logger.warning("BGM generation failed (non-fatal): %s", e)
 

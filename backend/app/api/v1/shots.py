@@ -26,6 +26,10 @@ def _shot_to_dict(s: Shot) -> dict:
         "qc_notes": s.qc_notes,
         "status": s.status,
         "clip_r2_key": s.clip_r2_key,
+        "continuity_notes": s.continuity_notes,
+        "sfx_prompt": s.sfx_prompt,
+        "ambience": s.ambience,
+        "motion_intensity": s.motion_intensity,
         "created_at": s.created_at.isoformat(),
     }
 
@@ -61,11 +65,13 @@ async def update_shot(shot_id: str, body: dict, db: AsyncSession = Depends(get_d
     if not shot:
         raise HTTPException(404, "Shot not found")
 
-    allowed = {"prompt", "duration", "characters_present"}
+    allowed = {"prompt", "duration", "characters_present", "continuity_notes", "motion_intensity"}
     for key, val in body.items():
         if key in allowed and val is not None:
             if key == "duration":
                 val = min(int(val), 8)  # enforce 8s cap
+            if key == "motion_intensity":
+                val = max(0, min(10, int(val)))  # enforce 0-10 range
             setattr(shot, key, val)
 
     await db.commit()

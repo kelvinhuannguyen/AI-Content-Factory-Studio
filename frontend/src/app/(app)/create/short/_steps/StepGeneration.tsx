@@ -73,7 +73,16 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
       setPipelineMsg(event.message || "Cinematic Director đang phân rã cảnh quay thành shots ≤8s...");
     } else if (type === "agent_done" && (event as any).agent === "cinematic_decomposer") {
       const shotCount = (event as any).shot_count ?? 0;
-      setPipelineMsg(`Phân rã hoàn thành — ${shotCount} shots sẵn sàng để render`);
+      setPipelineMsg(`Phân rã hoàn thành — ${shotCount} shots sẵn sàng để phân tích continuity`);
+    } else if (type === "agent_start" && (event as any).agent === "continuity_director") {
+      setPipelineMsg(event.message || "Continuity Director đang tạo Master Render List...");
+    } else if (type === "agent_done" && (event as any).agent === "continuity_director") {
+      const motionAvg = (event as any).motion_intensity_avg;
+      setPipelineMsg(
+        motionAvg != null
+          ? `Master Render List sẵn sàng — avg intensity ${motionAvg} · Bắt đầu render video...`
+          : "Continuity Director hoàn thành · Bắt đầu render video..."
+      );
     } else if (type === "pipeline_start" || type === "pipeline_queued") {
       setPipelineMsg(event.message || "Pipeline đang chạy...");
     } else if (type === "task_start" && task_type) {

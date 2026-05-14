@@ -40,6 +40,7 @@ class ProductionState(TypedDict):
     final_video_r2_key: Optional[str]
     subtitle_r2_key: Optional[str]    # SRT file in R2
     bgm_r2_key: Optional[str]        # background music MP3 in R2
+    continuity_manifest: Optional[dict]  # Master Render List from continuity_director
 
     # ── AI Scoring + Auto-Retry ───────────────────────────────────────────
     script_ai_score: Optional[int]   # 1-10, from script_scorer_node
@@ -102,6 +103,7 @@ def initial_state(
         final_video_r2_key=None,
         subtitle_r2_key=None,
         bgm_r2_key=None,
+        continuity_manifest=None,
         # AI Scoring + Auto-Retry
         script_ai_score=None,
         script_retry_count=0,

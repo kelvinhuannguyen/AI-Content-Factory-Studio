@@ -24,10 +24,16 @@ def _headers() -> dict:
     }
 
 
-async def generate_bgm(genre: str, style: str, duration_seconds: int) -> bytes:
+async def generate_bgm(
+    genre: str,
+    style: str,
+    duration_seconds: int,
+    motion_intensity_avg: float | None = None,
+) -> bytes:
     """
     Generate instrumental background music via minimax-music-pro.
     Returns MP3 bytes. Non-fatal — caller should wrap in try/except.
+    motion_intensity_avg (0-10) from continuity_director overrides genre-based mood when provided.
     """
     duration = min(max(duration_seconds, 10), 120)
     mood_map = {
@@ -38,6 +44,17 @@ async def generate_bgm(genre: str, style: str, duration_seconds: int) -> bytes:
         "drama": "emotional cinematic",
     }
     mood = mood_map.get(genre.lower(), "upbeat cinematic")
+
+    if motion_intensity_avg is not None:
+        if motion_intensity_avg >= 7.5:
+            mood = "high-energy intense orchestral, driving percussion, fast tempo"
+        elif motion_intensity_avg >= 5.0:
+            mood = "dynamic cinematic, building tension, moderate tempo"
+        elif motion_intensity_avg >= 2.5:
+            mood = "warm emotional underscore, gentle strings, medium pace"
+        else:
+            mood = "soft ambient atmospheric, minimal instrumentation, slow breath"
+
     prompt = f"{mood} instrumental background music, {style}, no vocals, loopable"
 
     payload = {
