@@ -151,9 +151,9 @@ async def scene_review_node(state: ProductionState) -> dict:
     approved: bool = decision.get("approved", False)
     return {
         "approval_status": "approved" if approved else "rejected",
-        "current_stage": "video_generator" if approved else "scene_planner",
+        "current_stage": "video_editor" if approved else "scene_planner",
     }
 
 
 def route_after_scene_review(state: ProductionState) -> str:
-    return "video_generator" if state.get("approval_status") == "approved" else "scene_planner"
+    return "video_editor" if state.get("approval_status") == "approved" else "scene_planner"

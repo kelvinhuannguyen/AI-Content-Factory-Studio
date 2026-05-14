@@ -197,6 +197,7 @@ _STEP_LABELS = {
     "character_review": "Duyệt Nhân Vật",
     "scene_review":     "Duyệt Phân Cảnh",
     "quality_review":   "Duyệt Chất Lượng Video",
+    "video_review":     "Duyệt Video Final",
     "seo_review":       "Duyệt Gói SEO",
 }
 
@@ -267,8 +268,11 @@ async def send_approval_request(
     html_body = _build_email_html(step_label, project_title, extra_info, approve_url, reject_url)
     to        = settings.notification_email
 
-    # Try SMTP first (personal Gmail), then service account (Workspace)
-    sent = await _send_smtp(to, subject, html_body)
+    # Try Resend first (if configured), then Gmail SMTP, then service account
+    from .resend_service import send_email_resend
+    sent = await send_email_resend(to, subject, html_body)
+    if not sent:
+        sent = await _send_smtp(to, subject, html_body)
     if not sent:
         sent = await _send_service_account(to, subject, html_body)
     if not sent:
@@ -288,6 +292,95 @@ async def send_approval_request(
     await _send_telegram(tg_text, approve_url, reject_url)
 
     return token
+
+
+def _build_video_review_html(
+    project_title: str,
+    ai_score: int,
+    overall_score: int,
+    proceed_url: str,
+    remake_url: str,
+    hold_url: str,
+) -> str:
+    score_color = "#16a34a" if overall_score >= 75 else "#d97706"
+    return f"""<!DOCTYPE html>
+<html lang="vi">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:20px;background:#f8fafc;font-family:system-ui,sans-serif">
+<div style="max-width:560px;margin:auto;background:white;border-radius:16px;padding:32px;box-shadow:0 2px 16px rgba(0,0,0,.08)">
+  <div style="text-align:center;margin-bottom:24px">
+    <span style="font-size:40px">🎬</span>
+    <h1 style="margin:8px 0 4px;font-size:22px;color:#1e293b">Duyệt Video Final</h1>
+    <p style="margin:0;color:#64748b;font-size:14px">AI Content Factory Studio</p>
+  </div>
+  <div style="background:#f1f5f9;border-radius:10px;padding:16px;margin-bottom:16px">
+    <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Dự án</p>
+    <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a">{project_title}</p>
+  </div>
+  <div style="text-align:center;background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:24px">
+    <div style="font-size:48px;font-weight:900;color:{score_color}">{overall_score}</div>
+    <div style="font-size:14px;color:#64748b">/ 100 điểm · AI Score: {ai_score}/10</div>
+    <div style="font-size:13px;margin-top:4px;color:{'#16a34a' if overall_score >= 75 else '#d97706'}">
+      {'✓ Đạt ngưỡng chất lượng (≥75)' if overall_score >= 75 else '⚠ Chưa đạt ngưỡng (<75)'}
+    </div>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:24px">
+    <a href="{proceed_url}"
+       style="flex:1;display:block;text-align:center;background:#16a34a;color:white;padding:14px 8px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
+      ✅ Tiếp tục
+    </a>
+    <a href="{remake_url}"
+       style="flex:1;display:block;text-align:center;background:#d97706;color:white;padding:14px 8px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
+      🔄 Làm lại
+    </a>
+    <a href="{hold_url}"
+       style="flex:1;display:block;text-align:center;background:#64748b;color:white;padding:14px 8px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
+      ⏸ Tạm dừng
+    </a>
+  </div>
+  <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
+    Link hết hạn sau 48 giờ · Chỉ dùng được 1 lần mỗi link
+  </p>
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
+  <p style="margin:0;font-size:11px;color:#cbd5e1;word-break:break-all">
+    Proceed: {proceed_url}<br>Remake: {remake_url}<br>Hold: {hold_url}
+  </p>
+</div>
+</body></html>"""
+
+
+async def send_video_review_request(
+    project_id: str,
+    project_title: str,
+    ai_score: int,
+    overall_score: int,
+) -> None:
+    """Send 3-action video review email: Proceed / Remake / Hold."""
+    proceed_token = await create_approval_token(project_id, "video_review")
+    remake_token  = await create_approval_token(project_id, "video_review")
+    hold_token    = await create_approval_token(project_id, "video_review")
+
+    proceed_url = _approval_url(proceed_token, "proceed")
+    remake_url  = _approval_url(remake_token, "remake")
+    hold_url    = _approval_url(hold_token, "hold")
+
+    logger.info("-" * 60)
+    logger.info("VIDEO REVIEW REQUEST for project %s", project_id)
+    logger.info("PROCEED: %s", proceed_url)
+    logger.info("REMAKE:  %s", remake_url)
+    logger.info("HOLD:    %s", hold_url)
+    logger.info("-" * 60)
+
+    subject   = f"[AI Content Factory] Duyệt Video Final — {project_title} ({overall_score}/100)"
+    html_body = _build_video_review_html(project_title, ai_score, overall_score, proceed_url, remake_url, hold_url)
+    to        = settings.notification_email
+
+    from .resend_service import send_email_resend
+    sent = await send_email_resend(to, subject, html_body)
+    if not sent:
+        sent = await _send_smtp(to, subject, html_body)
+    if not sent:
+        await _send_service_account(to, subject, html_body)
 
 
 async def send_simple_notification(subject: str, body: str) -> None:

@@ -33,6 +33,7 @@ interface ScoreData {
   gpt_feedback: string;
   human_approved: boolean | null;
   model_used: string;
+  video_url: string | null;
 }
 
 export default function StepQualityReview({ onNext, onBack }: StepProps) {
@@ -54,6 +55,7 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
       .then((data) => {
         if (data && data.overall_score !== undefined) {
           setScore(data);
+          setVideoUrl(data.video_url ?? null);
           if (data.human_approved !== null) setDecision(data.human_approved);
         }
       })
@@ -67,7 +69,12 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
       if (projectId) {
         fetch(`${BASE}/quality/${projectId}`)
           .then((r) => r.ok ? r.json() : null)
-          .then((data) => { if (data) setScore(data); })
+          .then((data) => {
+            if (data) {
+              setScore(data);
+              setVideoUrl(data.video_url ?? null);
+            }
+          })
           .catch(() => {});
       }
     }

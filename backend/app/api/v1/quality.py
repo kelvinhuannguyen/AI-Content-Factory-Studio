@@ -53,7 +53,7 @@ async def trigger_quality_score(body: dict, db: AsyncSession = Depends(get_db)):
 
 @router.get("/{project_id}")
 async def get_quality_score(project_id: str, db: AsyncSession = Depends(get_db)):
-    """Get the latest quality score for a project."""
+    """Get the latest quality score for a project, including final video URL."""
     try:
         pid = uuid.UUID(project_id)
     except ValueError:
@@ -68,7 +68,19 @@ async def get_quality_score(project_id: str, db: AsyncSession = Depends(get_db))
     if not qs:
         raise HTTPException(404, "Chưa có điểm chất lượng. Trigger /score trước.")
 
-    return _score_to_dict(qs)
+    # Resolve final video URL for the player
+    video_url: str | None = None
+    proj = await db.get(Project, pid)
+    if proj and proj.final_video_r2_key:
+        from ...services.r2_service import public_url, generate_presigned_url
+        video_url = public_url(proj.final_video_r2_key)
+        if not video_url:
+            try:
+                video_url = await generate_presigned_url(proj.final_video_r2_key)
+            except Exception:
+                video_url = None
+
+    return _score_to_dict(qs, video_url=video_url)
 
 
 @router.post("/{project_id}/review")
@@ -138,9 +150,10 @@ async def submit_human_review(
     }
 
 
-def _score_to_dict(qs: QualityScore) -> dict:
+def _score_to_dict(qs: QualityScore, video_url: str | None = None) -> dict:
     return {
         "id": str(qs.id),
+        "video_url": video_url,
         "project_id": str(qs.project_id),
         "overall_score": qs.overall_score,
         "passed": qs.overall_score >= 75,

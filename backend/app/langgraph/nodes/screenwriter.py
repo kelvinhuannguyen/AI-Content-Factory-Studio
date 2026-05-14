@@ -58,11 +58,16 @@ async def screenwriter_node(state: ProductionState) -> dict:
     project_id = state["project_id"]
     topic = state.get("topic") or ""
     notes = state.get("rejection_notes") or ""
+    # Increment retry counter when screenwriter is called again after AI scoring
+    prior_score = state.get("script_ai_score")
+    retry_count = state.get("script_retry_count", 0)
+    if prior_score is not None and prior_score < 8:
+        retry_count = retry_count + 1
 
     await publish_event(project_id, {
         "type": "agent_start",
         "agent": "screenwriter",
-        "message": "Đang viết kịch bản...",
+        "message": f"Đang viết kịch bản{'(lần ' + str(retry_count + 1) + ')' if retry_count > 0 else ''}...",
     })
 
     # Build prompt (append rejection notes if regenerating)
@@ -135,9 +140,11 @@ async def screenwriter_node(state: ProductionState) -> dict:
         "script_content": full_text,
         "script_html": content_html,
         "script_approved": False,
+        "script_ai_score": None,   # reset so scorer re-evaluates fresh script
+        "script_retry_count": retry_count,
         "approval_status": "pending",
         "rejection_notes": None,
-        "current_stage": "script_review",
+        "current_stage": "script_scorer",
         "error": None,
     }
 

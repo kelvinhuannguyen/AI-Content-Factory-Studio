@@ -26,11 +26,20 @@ class ProductionState(TypedDict):
     selected_character_id: Optional[str]
     character_approved: bool          # kết quả duyệt từ human interrupt
 
-    # ── Video Pipeline (Sprint 5+) ────────────────────────────────────────
+    # ── Video Pipeline ────────────────────────────────────────────────────
     scenes: list[dict]                # [{id, scene_number, video_prompt, duration_seconds}]
     video_clips: list[dict]           # [{scene_id, clip_r2_key, status}]
     voiceover_r2_key: Optional[str]
     final_video_r2_key: Optional[str]
+    subtitle_r2_key: Optional[str]    # SRT file in R2
+    bgm_r2_key: Optional[str]        # background music MP3 in R2
+
+    # ── AI Scoring + Auto-Retry ───────────────────────────────────────────
+    script_ai_score: Optional[int]   # 1-10, from script_scorer_node
+    script_retry_count: int          # auto-increments on screenwriter retry
+    video_ai_score: Optional[int]    # 1-10, from video_validator_node
+    video_retry_count: int           # auto-increments on video_editor retry
+    video_review_action: Optional[str]  # "proceed" | "remake" | "hold"
 
     # ── Control ───────────────────────────────────────────────────────────
     current_stage: str                # tên node hiện tại
@@ -75,6 +84,14 @@ def initial_state(
         video_clips=[],
         voiceover_r2_key=None,
         final_video_r2_key=None,
+        subtitle_r2_key=None,
+        bgm_r2_key=None,
+        # AI Scoring + Auto-Retry
+        script_ai_score=None,
+        script_retry_count=0,
+        video_ai_score=None,
+        video_retry_count=0,
+        video_review_action=None,
         # Control
         current_stage="start",
         error=None,

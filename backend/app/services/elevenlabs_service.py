@@ -25,17 +25,17 @@ async def generate_voiceover(text: str, language: str = "vi") -> bytes:
     if not settings.kymaapi_key:
         raise TTSError("KYMAAPI_KEY not configured")
 
-    # 1. Gemini 2.5 Flash Native Audio (cheapest, Google-quality)
-    try:
-        return await _gemini_native_audio(text, language)
-    except TTSError as e:
-        logger.warning("Gemini Native Audio TTS failed: %s — falling back to ElevenLabs", e)
-
-    # 2. ElevenLabs via KymaAPI /audio/speech
+    # 1. ElevenLabs eleven-multilingual-v2 (primary — confirmed working for Vietnamese)
     try:
         return await _elevenlabs_tts(text, language)
     except TTSError as e:
-        logger.warning("ElevenLabs TTS failed: %s", e)
+        logger.warning("ElevenLabs TTS failed: %s — falling back to Gemini Native Audio", e)
+
+    # 2. Gemini 2.5 Flash Native Audio (fallback — cheaper but Vietnamese support unverified)
+    try:
+        return await _gemini_native_audio(text, language)
+    except TTSError as e:
+        logger.warning("Gemini Native Audio TTS failed: %s", e)
 
     raise TTSError("All TTS providers unavailable")
 

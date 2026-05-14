@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 @router.post("/{token}")
 async def process_approval(
     token: str,
-    action: str = Query(..., pattern="^(approve|reject)$"),
+    action: str = Query(..., pattern="^(approve|reject|proceed|remake|hold)$"),
 ):
     """
     Được gọi từ nút trong email hoặc Telegram inline button.
@@ -41,7 +41,7 @@ async def process_approval(
 
     project_id = payload["project_id"]
     step       = payload["step"]
-    approved   = (action == "approve")
+    approved   = action in ("approve", "proceed")
 
     logger.info("Approval: project=%s step=%s action=%s", project_id, step, action)
 
@@ -67,18 +67,15 @@ async def process_approval(
         logger.warning("LangGraph resume error (non-fatal): %s", e)
 
     # HTML response — hiển thị trong browser khi click link
-    if approved:
-        return HTMLResponse(content=_html_page(
-            "Đã duyệt thành công", "✅",
-            f"Bước <strong>{_step_label(step)}</strong> đã được duyệt.<br>Pipeline tiếp tục tự động.",
-            "#16a34a",
-        ))
-    else:
-        return HTMLResponse(content=_html_page(
-            "Đã từ chối", "❌",
-            f"Bước <strong>{_step_label(step)}</strong> bị từ chối.<br>Hệ thống sẽ tạo lại.",
-            "#dc2626",
-        ))
+    _action_responses = {
+        "proceed": ("Đã duyệt — Tiếp tục", "✅", "#16a34a", "Pipeline tiếp tục tự động sang bước SEO."),
+        "remake":  ("Làm lại video", "🔄", "#d97706", "Hệ thống sẽ tạo lại video với chất lượng cao hơn."),
+        "hold":    ("Tạm dừng", "⏸", "#64748b", "Project đang ở trạng thái hold. Bạn có thể tiếp tục sau."),
+        "approve": ("Đã duyệt thành công", "✅", "#16a34a", f"Bước <strong>{_step_label(step)}</strong> đã được duyệt."),
+        "reject":  ("Đã từ chối", "❌", "#dc2626", f"Bước <strong>{_step_label(step)}</strong> bị từ chối."),
+    }
+    title, emoji, color, body = _action_responses.get(action, ("Hoàn thành", "✅", "#16a34a", ""))
+    return HTMLResponse(content=_html_page(title, emoji, body, color))
 
 
 @router.get("/{token}")
@@ -132,6 +129,10 @@ async def _build_resume_value(step: str, approved: bool, project_id: str) -> dic
             "notes": "" if approved else "Tu choi qua email",
         }
 
+    if step == "video_review":
+        # action is one of: proceed, remake, hold
+        return {"action": action}
+
     # seo_review và các bước khác
     return {"approved": approved}
 
@@ -164,6 +165,7 @@ def _step_label(step: str) -> str:
         "character_review": "Duyệt Nhân Vật",
         "scene_review":     "Duyệt Phân Cảnh",
         "quality_review":   "Duyệt Chất Lượng",
+        "video_review":     "Duyệt Video Final",
         "seo_review":       "Duyệt Gói SEO",
     }.get(step, step)
 

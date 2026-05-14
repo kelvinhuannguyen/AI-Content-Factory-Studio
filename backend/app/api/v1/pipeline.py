@@ -141,8 +141,11 @@ async def resume_pipeline(
         resume_value = {
             "approved": approved,
         }
+    elif step == "video_review":
+        action = body.get("action", "proceed")
+        resume_value = {"action": action}
     else:
-        raise HTTPException(422, f"Unknown step '{step}'. Valid: 'script', 'character', 'scene'")
+        raise HTTPException(422, f"Unknown step '{step}'. Valid: 'script', 'character', 'scene', 'video_review'")
 
     async def _run_resume():
         try:

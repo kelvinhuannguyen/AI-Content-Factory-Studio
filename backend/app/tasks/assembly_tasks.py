@@ -30,7 +30,7 @@ def assemble_video(self, results: list, project_id: str, voiceover_key: str | No
     return _run(_assemble_async(self, project_id, results, voiceover_key, music_key))
 
 
-async def _assemble_async(task, project_id, results, voiceover_key, music_key):
+async def _assemble_async(task, project_id, results, voiceover_key, music_key, subtitle_srt: str = ""):
     from ..database import AsyncSessionLocal
     from ..models.project import Project, ProjectStatus
     from ..models.generation_task import GenerationTask, TaskType, TaskStatus
@@ -99,6 +99,14 @@ async def _assemble_async(task, project_id, results, voiceover_key, music_key):
 
         # FFmpeg assembly
         final_bytes = await ffmpeg_assemble(clip_bytes_list, voiceover_bytes, music_bytes)
+
+        # Burn subtitles into assembled video (non-fatal)
+        if subtitle_srt:
+            try:
+                from ..services.subtitle_service import burn_subtitles_into_video
+                final_bytes = await burn_subtitles_into_video(final_bytes, subtitle_srt, project_id)
+            except Exception as e:
+                logger.warning("Subtitle burn failed (non-fatal): %s", e)
 
         # Upload final video to R2
         final_key = f"projects/{project_id}/final.mp4"

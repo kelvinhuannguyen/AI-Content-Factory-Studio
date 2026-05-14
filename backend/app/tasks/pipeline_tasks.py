@@ -85,7 +85,7 @@ async def run_production_pipeline_inline(project_id: str, music_key: str | None 
 
     # Assemble final video
     try:
-        await _assemble_async(_MockTask(), project_id, [], voiceover_key, music_key)
+        await _assemble_async(_MockTask(), project_id, [], voiceover_key, music_key, subtitle_srt="")
     except Exception as e:
         logger.error("Assembly failed: %s", e)
         await publish_event(project_id, {"type": "pipeline_error", "error": str(e)})

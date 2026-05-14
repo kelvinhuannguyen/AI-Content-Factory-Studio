@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     youtube_client_secret: str = ""
     youtube_api_key: str = ""
 
+    # Resend email
+    resend_api_key: str = ""
+    resend_from_email: str = "AI Factory <noreply@resend.dev>"
+
     # Notifications — Gmail
     # Option A (personal Gmail): set GMAIL_APP_PASSWORD (create at myaccount.google.com/apppasswords)
     gmail_sender_email: str = "kelvinhuannguyen@gmail.com"
