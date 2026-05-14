@@ -64,7 +64,7 @@ async def _run_ip_pipeline(state: ProductionState, script_content: str) -> dict:
     if not profiles:
         profiles = [_build_fallback_profile(character_name_hint, character_description_hint, genre, style)]
 
-    # Ensure each profile has required fields
+    # Ensure each profile has required fields (including style/genre for prompt builders)
     for i, p in enumerate(profiles):
         if "ref_id" not in p or not p["ref_id"]:
             p["ref_id"] = f"#CHAR_0{i + 1}"
@@ -74,6 +74,9 @@ async def _run_ip_pipeline(state: ProductionState, script_content: str) -> dict:
             p["character_index"] = i  # enforce order
         if "role" not in p:
             p["role"] = "main" if i == 0 else "supporting"
+        # Pass style/genre so prompt builders produce consistent rendering across hero + sheet
+        p["style"] = style
+        p["genre"] = genre
 
     character_vis_map = {
         p["ref_id"]: p.get("visual_identity_string", p.get("name", f"character {i}"))
@@ -97,17 +100,26 @@ async def _run_ip_pipeline(state: ProductionState, script_content: str) -> dict:
     }
 
 
+# Style → render keywords for hero portrait (must match _build_sheet_prompt)
+_HERO_RENDER: dict[str, str] = {
+    "anime":        "anime style, 2D illustration, vibrant colors, clean anime art, digital painting",
+    "animation-3d": "3D CGI character, Pixar-quality 3D render, digital art, smooth shading",
+    "vlog":         "photorealistic, lifestyle portrait, natural light, casual, realistic",
+    "cinematic":    "photorealistic, cinematic portrait, dramatic studio lighting, film quality, realistic",
+}
+
+
 def _build_image_prompt(profile: dict, user_prompt_addition: str = "") -> str:
     """
-    Build VIS-anchored base prompt for image generation.
-    VIS is the immutable prefix — all semantic invariants embedded.
-    Deterministic seed: character_index * 1337 + 42 (Chuẩn 2).
+    Build VIS-anchored base prompt for hero portrait.
+    Visual style is driven by profile["style"] so hero + sheet always match.
     """
     vis = profile.get("visual_identity_string", "")
     dna = profile.get("physical_dna") or {}
     palette = profile.get("color_palette") or {}
     char_index = profile.get("character_index", 0)
     name = profile.get("name", "")
+    style = profile.get("style", "cinematic")
 
     ethnicity = dna.get("ethnicity", "")
     age = dna.get("age_range", "")
@@ -116,7 +128,8 @@ def _build_image_prompt(profile: dict, user_prompt_addition: str = "") -> str:
     primary_hex = palette.get("primary", "")
     seed = char_index * 1337 + 42
 
-    # Build the anchored prompt
+    render = _HERO_RENDER.get(style, _HERO_RENDER["cinematic"])
+
     name_prefix = f"portrait of {name}: " if name else "portrait of a character: "
     base = (
         f"{name_prefix}{vis}, "
@@ -124,10 +137,7 @@ def _build_image_prompt(profile: dict, user_prompt_addition: str = "") -> str:
     )
     if primary_hex:
         base += f", dominant color {primary_hex}"
-    base += (
-        f", high quality, sharp detailed face, professional studio lighting, "
-        f"clean neutral background, photorealistic, seed:{seed}"
-    )
+    base += f", {render}, sharp detailed face, clean neutral background, seed:{seed}"
 
     if user_prompt_addition and user_prompt_addition.strip():
         base += f", {user_prompt_addition.strip()}"
@@ -135,21 +145,33 @@ def _build_image_prompt(profile: dict, user_prompt_addition: str = "") -> str:
     return base
 
 
+# Style → render keywords for character sheet (mirrors _HERO_RENDER)
+_SHEET_RENDER: dict[str, str] = {
+    "anime":        "anime character design sheet, 2D illustration, clean linework, anime art style",
+    "animation-3d": "3D character reference sheet, CGI render, digital art, smooth shading",
+    "vlog":         "photorealistic character reference sheet, studio photography, realistic portrait series",
+    "cinematic":    "photorealistic character reference sheet, cinematic studio photography, realistic portrait series",
+}
+
+
 def _build_sheet_prompt(profile: dict) -> str:
     """
     Build Character Sheet prompt (Chuẩn 1 — multi-angle reference).
-    Front + side view on white background for consistency reference.
+    Uses SAME rendering style as hero portrait so both images are consistent.
     """
     vis = profile.get("visual_identity_string", "")
     char_index = profile.get("character_index", 0)
+    style = profile.get("style", "cinematic")
     seed = char_index * 1337 + 100  # different seed from hero portrait
 
+    sheet_style = _SHEET_RENDER.get(style, _SHEET_RENDER["cinematic"])
+
     return (
-        f"character design sheet: {vis}, "
-        f"turnaround reference: front view on left, 3/4 angle on right, "
+        f"{sheet_style}: {vis}, "
+        f"three views: front view, side profile view, 3/4 angle view, "
         f"full body portrait, white background, "
-        f"concept art reference sheet, consistent character identity, "
-        f"high quality, detailed face and outfit, seed:{seed}"
+        f"consistent character identity, detailed face and outfit, "
+        f"high quality, seed:{seed}"
     )
 
 
@@ -207,4 +229,6 @@ def _build_fallback_profile(
         "color_palette": {},
         "semantic_invariants": [],
         "visual_identity_string": vis,
+        "style": style,
+        "genre": genre,
     }
