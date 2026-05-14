@@ -74,7 +74,9 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
       } else if (
         state.current_stage === "scene_planner" ||
         state.current_stage === "scene_review" ||
-        state.current_stage === "video_generator" ||
+        state.current_stage === "video_editor" ||
+        state.current_stage === "video_validator" ||
+        state.paused_at === "video_review" ||
         state.status === "completed"
       ) {
         await loadCharacters();

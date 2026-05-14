@@ -80,7 +80,9 @@ export default function StepScript({ onNext, onBack }: StepProps) {
         state.current_stage === "character_review" ||
         state.current_stage === "scene_planner" ||
         state.current_stage === "scene_review" ||
-        state.current_stage === "video_generator" ||
+        state.current_stage === "video_editor" ||
+        state.current_stage === "video_validator" ||
+        state.paused_at === "video_review" ||
         state.status === "completed"
       ) {
         // Already past script review — user came back

@@ -60,7 +60,9 @@ export default function StepSceneBreakdown({ onNext, onBack }: StepProps) {
         await loadScenes();
         setPhase("ready");
       } else if (
-        state.current_stage === "video_generator" ||
+        state.current_stage === "video_editor" ||
+        state.current_stage === "video_validator" ||
+        state.paused_at === "video_review" ||
         state.status === "completed"
       ) {
         await loadScenes();
