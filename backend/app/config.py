@@ -52,17 +52,12 @@ class Settings(BaseSettings):
     youtube_client_secret: str = ""
     youtube_api_key: str = ""
 
-    # Resend email
+    # Resend (primary email provider)
     resend_api_key: str = ""
-    resend_from_email: str = "AI Factory <noreply@resend.dev>"
+    resend_from_email: str = "AI Factory <onboarding@resend.dev>"
 
-    # Notifications — Gmail
-    # Option A (personal Gmail): set GMAIL_APP_PASSWORD (create at myaccount.google.com/apppasswords)
-    gmail_sender_email: str = "kelvinhuannguyen@gmail.com"
-    gmail_app_password: str = ""   # 16-char app password from Google Account settings
-    # Option B (Google Workspace + DWD): path to service account JSON file
-    gmail_service_account_json: str = "credentials/gmail_service_account.json"
-    notification_email: str = "kelvinhuannguyen@gmail.com"
+    # Notifications
+    notification_email: str = "kelvinhuannguyen@gmail.com"  # where approval emails go
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 

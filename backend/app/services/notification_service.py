@@ -1,36 +1,26 @@
-"""Notification service — Gmail SMTP (primary) + service account fallback.
+"""Notification service — Resend (primary) + Telegram (optional).
 
 Approval flow:
-  1. send_approval_request() → creates Redis token (48h) → sends email
-  2. User clicks Duyệt/Từ chối link in email → POST /approvals/{token}?action=approve|reject
+  1. send_approval_request() → creates Redis token (48h) → sends email via Resend
+  2. User clicks link in email → POST /approvals/{token}?action=approve|reject|proceed|remake|hold
   3. Token resolved → LangGraph resumed
-
-Gmail strategy (personal Gmail):
-  • Primary:  Gmail SMTP via App Password (smtp.gmail.com:587)
-  • Fallback: Google Workspace service account + DWD (not for @gmail.com)
-  • Always:   Log approval URLs to console so dev can test without email config
 """
 from __future__ import annotations
-import asyncio
 import json
 import logging
-import smtplib
-import ssl
 import uuid
 from datetime import datetime, timezone
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
-from pathlib import Path
 
 import httpx
 
 from ..config import get_settings
 from ..redis_client import get_redis
+from .resend_service import send_email_resend
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_TOKEN_TTL = 48 * 3600   # 48 hours
+_TOKEN_TTL = 48 * 3600  # 48 hours
 
 # ── Token management ──────────────────────────────────────────────────────────
 
@@ -63,120 +53,16 @@ def _approval_url(token: str, action: str) -> str:
     return f"{settings.backend_url}/api/v1/approvals/{token}?action={action}"
 
 
-# ── Gmail SMTP (personal Gmail + App Password) ────────────────────────────────
+# ── Telegram (optional) ───────────────────────────────────────────────────────
 
-async def _send_smtp(to: str, subject: str, html_body: str) -> bool:
-    """
-    Send via Gmail SMTP using App Password.
-    Requires GMAIL_APP_PASSWORD set in .env.
-    Returns True on success.
-    """
-    if not settings.gmail_app_password:
-        return False
-
-    sender = settings.gmail_sender_email or settings.notification_email
-    # App Passwords are shown in groups of 4 (e.g. "xxxx xxxx xxxx xxxx")
-    # Strip spaces — SMTP requires the raw 16-char password
-    app_password = settings.gmail_app_password.replace(" ", "")
-    loop = asyncio.get_event_loop()
-
-    def _do_send():
-        ctx = ssl.create_default_context()
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = f"AI Content Factory <{sender}>"
-        msg["To"]      = to
-        msg.attach(MIMEText(html_body, "html", "utf-8"))
-
-        with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
-            smtp.ehlo()
-            smtp.starttls(context=ctx)
-            smtp.login(sender, app_password)
-            smtp.sendmail(sender, to, msg.as_string())
-
-    try:
-        await loop.run_in_executor(None, _do_send)
-        logger.info("Gmail SMTP sent to %s (subject len=%d)", to, len(subject))
-        return True
-    except smtplib.SMTPAuthenticationError:
-        logger.error(
-            "Gmail SMTP auth failed. "
-            "Ensure 2-Step Verification is ON and GMAIL_APP_PASSWORD is correct. "
-            "Create one at: https://myaccount.google.com/apppasswords"
-        )
-        return False
-    except Exception as e:
-        logger.error("Gmail SMTP error: %s", e)
-        return False
-
-
-# ── Gmail API via service account (Google Workspace + DWD only) ───────────────
-
-async def _send_service_account(to: str, subject: str, html_body: str) -> bool:
-    """
-    Send via Gmail API with service account.
-    Only works when Domain-Wide Delegation is configured on a Google Workspace domain.
-    Will NOT work for personal @gmail.com accounts.
-    """
-    sa_path_or_json = settings.gmail_service_account_json
-    if not sa_path_or_json:
-        return False
-
-    # Resolve: either a file path or raw JSON string
-    sa_info: dict | None = None
-    path = Path(sa_path_or_json)
-    if path.exists():
-        sa_info = json.loads(path.read_text())
-    else:
-        try:
-            sa_info = json.loads(sa_path_or_json)
-        except (json.JSONDecodeError, ValueError):
-            logger.warning("gmail_service_account_json is not a valid path or JSON")
-            return False
-
-    try:
-        import base64
-        from email.mime.text import MIMEText as _MIMEText
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-
-        sender = settings.notification_email
-        creds = service_account.Credentials.from_service_account_info(
-            sa_info,
-            scopes=["https://www.googleapis.com/auth/gmail.send"],
-        ).with_subject(sender)   # requires DWD
-
-        service = build("gmail", "v1", credentials=creds, cache_discovery=False)
-        msg = _MIMEText(html_body, "html", "utf-8")
-        msg["To"] = to
-        msg["Subject"] = subject
-        raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            lambda: service.users().messages().send(userId="me", body={"raw": raw}).execute(),
-        )
-        logger.info("Gmail service account sent to %s", to)
-        return True
-    except Exception as e:
-        logger.warning("Gmail service account send failed (likely no DWD): %s", e)
-        return False
-
-
-# ── Telegram ──────────────────────────────────────────────────────────────────
-
-async def _send_telegram(text: str, approve_url: str, reject_url: str) -> None:
+async def _send_telegram(text: str, buttons: list[dict]) -> None:
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
         return
     payload = {
         "chat_id": settings.telegram_chat_id,
         "text": text,
         "parse_mode": "HTML",
-        "reply_markup": {"inline_keyboard": [[
-            {"text": "✅ Duyệt", "url": approve_url},
-            {"text": "❌ Từ chối", "url": reject_url},
-        ]]},
+        "reply_markup": {"inline_keyboard": [buttons]},
     }
     try:
         async with httpx.AsyncClient(timeout=10) as client:
@@ -185,12 +71,12 @@ async def _send_telegram(text: str, approve_url: str, reject_url: str) -> None:
                 json=payload,
             )
         if resp.status_code != 200:
-            logger.error("Telegram error %s: %s", resp.status_code, resp.text[:200])
+            logger.warning("Telegram error %s: %s", resp.status_code, resp.text[:200])
     except Exception as e:
-        logger.error("Telegram error: %s", e)
+        logger.warning("Telegram error: %s", e)
 
 
-# ── Email body builders ────────────────────────────────────────────────────────
+# ── Email body builders ───────────────────────────────────────────────────────
 
 _STEP_LABELS = {
     "script_review":    "Duyệt Kịch Bản",
@@ -202,7 +88,10 @@ _STEP_LABELS = {
 }
 
 
-def _build_email_html(step_label: str, project_title: str, extra_info: str, approve_url: str, reject_url: str) -> str:
+def _build_email_html(
+    step_label: str, project_title: str, extra_info: str,
+    approve_url: str, reject_url: str,
+) -> str:
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -239,70 +128,13 @@ def _build_email_html(step_label: str, project_title: str, extra_info: str, appr
 </body></html>"""
 
 
-# ── Public API ─────────────────────────────────────────────────────────────────
-
-async def send_approval_request(
-    project_id: str,
-    project_title: str,
-    step: str,
-    extra_info: str = "",
-) -> str:
-    """
-    Create approval token + send Gmail notification.
-    Always logs the URLs to console (useful when email not configured).
-    Returns the token.
-    """
-    token = await create_approval_token(project_id, step)
-    approve_url = _approval_url(token, "approve")
-    reject_url  = _approval_url(token, "reject")
-    step_label  = _STEP_LABELS.get(step, step)
-
-    # Always log — dev can copy-paste to test without email setup
-    logger.info("-" * 60)
-    logger.info("APPROVAL REQUEST: %s", step)
-    logger.info("APPROVE: %s", approve_url)
-    logger.info("REJECT:  %s", reject_url)
-    logger.info("-" * 60)
-
-    subject   = f"[AI Content Factory] {step_label} — {project_title}"
-    html_body = _build_email_html(step_label, project_title, extra_info, approve_url, reject_url)
-    to        = settings.notification_email
-
-    # Try Resend first (if configured), then Gmail SMTP, then service account
-    from .resend_service import send_email_resend
-    sent = await send_email_resend(to, subject, html_body)
-    if not sent:
-        sent = await _send_smtp(to, subject, html_body)
-    if not sent:
-        sent = await _send_service_account(to, subject, html_body)
-    if not sent:
-        logger.warning(
-            "Email not sent (no credentials configured). "
-            "To enable: set GMAIL_APP_PASSWORD in .env. "
-            "Approval URLs are logged above."
-        )
-
-    # Telegram (optional — skip if not configured)
-    tg_text = (
-        f"🎬 <b>{step_label}</b>\n"
-        f"Dự án: <b>{project_title}</b>\n"
-        + (f"{extra_info}\n" if extra_info else "")
-        + "Chọn hành động:"
-    )
-    await _send_telegram(tg_text, approve_url, reject_url)
-
-    return token
-
-
 def _build_video_review_html(
-    project_title: str,
-    ai_score: int,
-    overall_score: int,
-    proceed_url: str,
-    remake_url: str,
-    hold_url: str,
+    project_title: str, ai_score: int, overall_score: int,
+    proceed_url: str, remake_url: str, hold_url: str,
 ) -> str:
     score_color = "#16a34a" if overall_score >= 75 else "#d97706"
+    status_text = "✓ Đạt ngưỡng chất lượng (≥75)" if overall_score >= 75 else "⚠ Chưa đạt ngưỡng (<75)"
+    status_color = "#16a34a" if overall_score >= 75 else "#d97706"
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -320,9 +152,7 @@ def _build_video_review_html(
   <div style="text-align:center;background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:24px">
     <div style="font-size:48px;font-weight:900;color:{score_color}">{overall_score}</div>
     <div style="font-size:14px;color:#64748b">/ 100 điểm · AI Score: {ai_score}/10</div>
-    <div style="font-size:13px;margin-top:4px;color:{'#16a34a' if overall_score >= 75 else '#d97706'}">
-      {'✓ Đạt ngưỡng chất lượng (≥75)' if overall_score >= 75 else '⚠ Chưa đạt ngưỡng (<75)'}
-    </div>
+    <div style="font-size:13px;margin-top:4px;color:{status_color}">{status_text}</div>
   </div>
   <div style="display:flex;gap:10px;margin-bottom:24px">
     <a href="{proceed_url}"
@@ -349,6 +179,46 @@ def _build_video_review_html(
 </body></html>"""
 
 
+# ── Public API ─────────────────────────────────────────────────────────────────
+
+async def send_approval_request(
+    project_id: str,
+    project_title: str,
+    step: str,
+    extra_info: str = "",
+) -> str:
+    """
+    Create approval token + send email via Resend.
+    Always logs URLs to console (useful when Resend not configured).
+    Returns the token.
+    """
+    token = await create_approval_token(project_id, step)
+    approve_url = _approval_url(token, "approve")
+    reject_url  = _approval_url(token, "reject")
+    step_label  = _STEP_LABELS.get(step, step)
+
+    logger.info("-" * 60)
+    logger.info("APPROVAL REQUEST: %s | project=%s", step, project_id)
+    logger.info("APPROVE: %s", approve_url)
+    logger.info("REJECT:  %s", reject_url)
+    logger.info("-" * 60)
+
+    subject   = f"[AI Content Factory] {step_label} — {project_title}"
+    html_body = _build_email_html(step_label, project_title, extra_info, approve_url, reject_url)
+    to        = settings.notification_email
+
+    sent = await send_email_resend(to, subject, html_body)
+    if not sent:
+        logger.warning("Resend not configured — approval URLs logged above. Set RESEND_API_KEY in Railway.")
+
+    await _send_telegram(
+        f"🎬 <b>{step_label}</b>\nDự án: <b>{project_title}</b>\n{extra_info + chr(10) if extra_info else ''}Chọn hành động:",
+        [{"text": "✅ Duyệt", "url": approve_url}, {"text": "❌ Từ chối", "url": reject_url}],
+    )
+
+    return token
+
+
 async def send_video_review_request(
     project_id: str,
     project_title: str,
@@ -361,11 +231,11 @@ async def send_video_review_request(
     hold_token    = await create_approval_token(project_id, "video_review")
 
     proceed_url = _approval_url(proceed_token, "proceed")
-    remake_url  = _approval_url(remake_token, "remake")
-    hold_url    = _approval_url(hold_token, "hold")
+    remake_url  = _approval_url(remake_token,  "remake")
+    hold_url    = _approval_url(hold_token,    "hold")
 
     logger.info("-" * 60)
-    logger.info("VIDEO REVIEW REQUEST for project %s", project_id)
+    logger.info("VIDEO REVIEW: project=%s score=%d/100", project_id, overall_score)
     logger.info("PROCEED: %s", proceed_url)
     logger.info("REMAKE:  %s", remake_url)
     logger.info("HOLD:    %s", hold_url)
@@ -375,12 +245,18 @@ async def send_video_review_request(
     html_body = _build_video_review_html(project_title, ai_score, overall_score, proceed_url, remake_url, hold_url)
     to        = settings.notification_email
 
-    from .resend_service import send_email_resend
     sent = await send_email_resend(to, subject, html_body)
     if not sent:
-        sent = await _send_smtp(to, subject, html_body)
-    if not sent:
-        await _send_service_account(to, subject, html_body)
+        logger.warning("Resend not configured — video review URLs logged above.")
+
+    await _send_telegram(
+        f"🎬 <b>Duyệt Video Final</b>\nDự án: <b>{project_title}</b>\nĐiểm: {overall_score}/100",
+        [
+            {"text": "✅ Tiếp tục", "url": proceed_url},
+            {"text": "🔄 Làm lại",  "url": remake_url},
+            {"text": "⏸ Tạm dừng", "url": hold_url},
+        ],
+    )
 
 
 async def send_simple_notification(subject: str, body: str) -> None:
@@ -388,6 +264,4 @@ async def send_simple_notification(subject: str, body: str) -> None:
     to = settings.notification_email
     html = f"""<div style="font-family:sans-serif;max-width:560px;margin:auto;padding:24px">
 <h2>🎬 AI Content Factory</h2><p>{body}</p></div>"""
-    sent = await _send_smtp(to, subject, html)
-    if not sent:
-        await _send_service_account(to, subject, html)
+    await send_email_resend(to, subject, html)
