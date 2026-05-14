@@ -168,34 +168,18 @@ async def video_editor_node(state: ProductionState) -> dict:
         subtitle_srt = await generate_subtitles(voiceover_bytes, language)
         subtitle_key = await upload_subtitle(project_id, subtitle_srt)
 
-    # ── 5. Assemble video ─────────────────────────────────────────────────
-    from ...tasks.assembly_tasks import _assemble_async
-
-    final_key: str | None = None
-    try:
-        final_key = await _assemble_async(
-            _MockTask(), project_id, [], voiceover_key, bgm_key,
-            subtitle_srt=subtitle_srt,
-        )
-    except Exception as e:
-        logger.error("Assembly failed: %s", e)
-        await publish_event(project_id, {"type": "pipeline_error", "error": str(e)})
-        return {"error": str(e), "current_stage": "video_editor"}
-
     await publish_event(project_id, {
         "type": "agent_done",
         "agent": "video_editor",
-        "final_video_r2_key": final_key,
         "has_subtitle": bool(subtitle_key),
         "has_bgm": bool(bgm_key),
-        "message": "Video đã dựng xong — đang chấm điểm chất lượng...",
+        "message": "Clips & audio sẵn sàng — chuyển sang Final Assembler...",
     })
 
     return {
-        "final_video_r2_key": final_key,
         "voiceover_r2_key": voiceover_key,
         "subtitle_r2_key": subtitle_key,
         "bgm_r2_key": bgm_key,
         "error": None,
-        "current_stage": "video_validator",
+        "current_stage": "final_assembler",
     }

@@ -41,6 +41,7 @@ class ProductionState(TypedDict):
     subtitle_r2_key: Optional[str]    # SRT file in R2
     bgm_r2_key: Optional[str]        # background music MP3 in R2
     continuity_manifest: Optional[dict]  # Master Render List from continuity_director
+    blueprint_r2_key: Optional[str]     # R2 path to blueprint.json from final_assembler
 
     # ── AI Scoring + Auto-Retry ───────────────────────────────────────────
     script_ai_score: Optional[int]   # 1-10, from script_scorer_node
@@ -104,6 +105,7 @@ def initial_state(
         subtitle_r2_key=None,
         bgm_r2_key=None,
         continuity_manifest=None,
+        blueprint_r2_key=None,
         # AI Scoring + Auto-Retry
         script_ai_score=None,
         script_retry_count=0,

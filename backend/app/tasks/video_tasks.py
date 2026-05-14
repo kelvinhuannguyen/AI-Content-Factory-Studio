@@ -64,10 +64,16 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
         await upload_bytes(r2_key, video_bytes, content_type="video/mp4")
 
         async with AsyncSessionLocal() as db:
-            scene = await db.get(Scene, sid)
-            if scene:
-                scene.clip_r2_key = r2_key
-                scene.status = SceneStatus.ready
+            # Try Shot first (cinematic_decomposer mode passes Shot.id as scene_id)
+            from ..models.shot import Shot as ShotModel
+            shot_row = await db.get(ShotModel, sid)
+            if shot_row:
+                shot_row.clip_r2_key = r2_key
+            else:
+                scene_row = await db.get(Scene, sid)
+                if scene_row:
+                    scene_row.clip_r2_key = r2_key
+                    scene_row.status = SceneStatus.ready
             gt = await db.get(GenerationTask, gt_id)
             if gt:
                 gt.status = TaskStatus.success

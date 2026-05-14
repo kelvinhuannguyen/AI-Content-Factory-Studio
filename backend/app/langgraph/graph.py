@@ -1,12 +1,13 @@
-"""LangGraph StateGraph — 14 nodes, 5 interrupt points.
+"""LangGraph StateGraph — 15 nodes, 5 interrupt points.
 
 Graph flow:
   screenwriter → script_scorer → script_review(INTERRUPT) → character_designer
     ↑ retry < 8/10                ↑ human reject loops back
   → character_scorer → character_review(INTERRUPT) → scene_planner → scene_review(INTERRUPT)
      ↑ AI retry < 8/10   ↑ human reject loops back to character_designer
-  → cinematic_decomposer → continuity_director → video_editor → video_validator → video_review(INTERRUPT) → END
-                                                                  ↑ AI retry < 8/10  ↑ remake loops back
+  → cinematic_decomposer → continuity_director → video_editor
+  → final_assembler → video_validator → video_review(INTERRUPT) → END
+     ↑ AI retry < 8/10                  ↑ remake loops back to video_editor
 """
 from __future__ import annotations
 import logging
@@ -38,6 +39,7 @@ from .nodes.scene_planner import (
 )
 from .nodes.cinematic_decomposer import cinematic_decomposer_node
 from .nodes.continuity_director import continuity_director_node
+from .nodes.final_assembler import final_assembler_node
 from .nodes.video_editor import video_editor_node
 from .nodes.video_validator import (
     video_validator_node,
@@ -66,6 +68,7 @@ def _build_graph():
     builder.add_node("cinematic_decomposer",    cinematic_decomposer_node)
     builder.add_node("continuity_director",     continuity_director_node)
     builder.add_node("video_editor",            video_editor_node)
+    builder.add_node("final_assembler",         final_assembler_node)
     builder.add_node("video_validator",    video_validator_node)
     builder.add_node("video_review",       video_review_node)
 
@@ -110,7 +113,8 @@ def _build_graph():
     builder.add_edge("continuity_director",  "video_editor")
 
     # ── Video pipeline ────────────────────────────────────────────────────
-    builder.add_edge("video_editor", "video_validator")
+    builder.add_edge("video_editor",    "final_assembler")
+    builder.add_edge("final_assembler", "video_validator")
     builder.add_conditional_edges(
         "video_validator",
         route_after_video_validator,
@@ -132,5 +136,5 @@ async def get_graph():
         from .checkpointer import get_checkpointer
         checkpointer = await get_checkpointer()
         _graph = _build_graph().compile(checkpointer=checkpointer)
-        logger.info("LangGraph compiled: 14 nodes, 5 interrupt points")
+        logger.info("LangGraph compiled: 15 nodes, 5 interrupt points")
     return _graph

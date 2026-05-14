@@ -45,3 +45,4 @@ class Project(UUIDBase):
     topic: Mapped[str | None] = mapped_column(Text, nullable=True)
     preferred_language: Mapped[str] = mapped_column(String(10), nullable=False, default="vi")
     final_video_r2_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    blueprint_r2_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)

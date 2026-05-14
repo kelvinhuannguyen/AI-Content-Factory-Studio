@@ -83,6 +83,16 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
           ? `Master Render List sẵn sàng — avg intensity ${motionAvg} · Bắt đầu render video...`
           : "Continuity Director hoàn thành · Bắt đầu render video..."
       );
+    } else if (type === "agent_done" && (event as any).agent === "video_editor") {
+      setPipelineMsg(event.message || "Clips & audio sẵn sàng — chuyển sang Final Assembler...");
+    } else if (type === "agent_start" && (event as any).agent === "final_assembler") {
+      setPipelineMsg(event.message || "Final Assembler đang dựng & hoàn thiện video...");
+    } else if (type === "agent_done" && (event as any).agent === "final_assembler") {
+      const cc = (event as any).clip_count ?? 0;
+      const hasSfx = (event as any).has_sfx;
+      setPipelineMsg(
+        `Video hoàn chỉnh — ${cc} clips · xfade · color grade${hasSfx ? " · SFX ambient" : ""} · Đang chấm điểm...`
+      );
     } else if (type === "pipeline_start" || type === "pipeline_queued") {
       setPipelineMsg(event.message || "Pipeline đang chạy...");
     } else if (type === "task_start" && task_type) {
