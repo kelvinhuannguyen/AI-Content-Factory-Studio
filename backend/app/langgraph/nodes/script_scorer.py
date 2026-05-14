@@ -8,18 +8,17 @@ from ..state import ProductionState
 
 logger = logging.getLogger(__name__)
 
-_SCORER_SYSTEM = """Bạn là biên tập viên nội dung cao cấp chuyên đánh giá kịch bản video ngắn.
-Chấm điểm kịch bản theo 4 tiêu chí (mỗi tiêu chí 1-10), sau đó tính điểm tổng.
+_SCORER_SYSTEM = """You are a senior content editor scoring short video scripts.
+OUTPUT ONLY a JSON object. No explanation, no reasoning, no other text.
 
-Tiêu chí:
-1. Hook (3s đầu): Độ thu hút, có khiến người xem dừng lại không?
-2. Mạch câu chuyện: Logic, nhất quán, có cảm xúc?
-3. Tiềm năng viral: Có chia sẻ được? Có trending hook?
-4. Nhịp độ & độ dài: Phù hợp với duration, không quá dài/ngắn?
+Score on 4 criteria (each 1-10):
+1. hook: First 3 seconds — does it stop the scroll?
+2. story: Coherence and emotion
+3. viral: Shareability and trending potential
+4. pacing: Fits the duration, not too long/short
 
-Trả về JSON:
-{"score": <1-10>, "hook": <1-10>, "story": <1-10>, "viral": <1-10>, "pacing": <1-10>, "feedback": "<1-2 câu nhận xét ngắn gọn>"}
-"""
+Required output (exactly this format, nothing else):
+{"score": <average 1-10>, "hook": <1-10>, "story": <1-10>, "viral": <1-10>, "pacing": <1-10>, "feedback": "<one sentence in Vietnamese>"}"""
 
 
 async def script_scorer_node(state: ProductionState) -> dict:
@@ -39,16 +38,16 @@ async def script_scorer_node(state: ProductionState) -> dict:
         "message": f"Đang chấm điểm kịch bản (lần {retry_count + 1}/3)...",
     })
 
-    user_prompt = f"""Kịch bản cần chấm điểm:
+    user_prompt = f"""Script to score:
 
-{script_content[:3000]}
+{script_content[:2000]}
 
-Chấm điểm tổng hợp (1-10). Nếu < 8 điểm, kịch bản sẽ được viết lại."""
+IMPORTANT: Output ONLY the JSON object. Nothing before or after it."""
 
     score = 5
     feedback = ""
     try:
-        result = await chat_json(_SCORER_SYSTEM, user_prompt, temperature=0.3, max_tokens=256)
+        result = await chat_json(_SCORER_SYSTEM, user_prompt, temperature=0.1, max_tokens=512)
         score = max(1, min(10, int(result.get("score", 5))))
         feedback = result.get("feedback", "")
     except (LLMError, Exception) as e:

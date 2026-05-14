@@ -18,10 +18,17 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+_resume_locks: set[str] = set()  # prevent concurrent resume on same project
+
+
 async def _do_resume(project_id: str, step: str, action: str, approved: bool) -> None:
     """Run LangGraph resume in background — avoids browser timeout on slow nodes."""
-    resume_value = await _build_resume_value(step, approved, project_id, action)
+    if project_id in _resume_locks:
+        logger.warning("Resume already in progress for project %s — skipping duplicate", project_id)
+        return
+    _resume_locks.add(project_id)
     try:
+        resume_value = await _build_resume_value(step, approved, project_id, action)
         from ...langgraph.graph import get_graph
         from ...langgraph.checkpointer import get_thread_config
         from langgraph.types import Command
@@ -35,6 +42,8 @@ async def _do_resume(project_id: str, step: str, action: str, approved: bool) ->
             logger.info("LangGraph not paused for project %s — skipping resume", project_id)
     except Exception as e:
         logger.warning("LangGraph resume error (non-fatal): %s", e)
+    finally:
+        _resume_locks.discard(project_id)
 
 
 def _action_html(action: str, step: str) -> HTMLResponse:

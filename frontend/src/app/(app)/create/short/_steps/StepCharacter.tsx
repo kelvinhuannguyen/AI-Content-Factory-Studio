@@ -106,36 +106,39 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
     if (type === "character_progress") {
       const idx = event.variant_index ?? 0;
       setVariants((prev) => {
-        const next = [...prev];
-        if (!next[idx]) {
-          next[idx] = { id: "", variant_index: idx, status: "generating" };
-        } else {
-          next[idx] = { ...next[idx], status: "generating" };
-        }
-        return next;
+        // Always maintain a dense array of 3 — no undefined holes
+        const base: CharacterVariant[] = Array.from({ length: 3 }, (_, i) =>
+          prev[i] ?? { id: "", variant_index: i, status: "pending" as const }
+        );
+        base[idx] = { ...base[idx], status: "generating" };
+        return base;
       });
     }
 
     if (type === "character_ready") {
       const idx = event.variant_index ?? 0;
       setVariants((prev) => {
-        const next = [...prev];
-        next[idx] = {
-          id: event.task_id ?? event.character_id ?? "",
+        const base: CharacterVariant[] = Array.from({ length: 3 }, (_, i) =>
+          prev[i] ?? { id: "", variant_index: i, status: "pending" as const }
+        );
+        base[idx] = {
+          id: event.character_id ?? event.task_id ?? "",
           variant_index: idx,
           image_url: event.result_url ?? undefined,
           status: "ready",
         };
-        return next;
+        return base;
       });
     }
 
     if (type === "character_error") {
       const idx = event.variant_index ?? 0;
       setVariants((prev) => {
-        const next = [...prev];
-        if (next[idx]) next[idx] = { ...next[idx], status: "error" };
-        return next;
+        const base: CharacterVariant[] = Array.from({ length: 3 }, (_, i) =>
+          prev[i] ?? { id: "", variant_index: i, status: "pending" as const }
+        );
+        base[idx] = { ...base[idx], status: "error" };
+        return base;
       });
     }
 
@@ -259,7 +262,7 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
           </div>
 
           <div className="grid grid-cols-3 gap-4">
-            {variants.map((v, i) => (
+            {variants.filter((v): v is CharacterVariant => v != null).map((v, i) => (
               <button
                 key={v.id || i}
                 onClick={() => phase === "ready" && v.status === "ready" && handleSelect(v.id)}
