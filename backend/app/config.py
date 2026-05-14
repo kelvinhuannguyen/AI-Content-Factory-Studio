@@ -17,9 +17,9 @@ class Settings(BaseSettings):
     kymaapi_base_url: str = "https://api.kymaapi.com/v1"
     kymaapi_llm_model: str = "gemini-2.5-flash"
     kymaapi_llm_model_long: str = "deepseek-v3"
-    # Vision models for quality scoring (GPT-4o deprecated → GPT-5.x)
-    kymaapi_vision_model: str = "gpt-5.4"          # primary — fast + multimodal
-    kymaapi_vision_model_fallback: str = "gpt-5.5"  # fallback — latest, expensive
+    # Vision models for quality scoring (gemini-2.5-flash supports multimodal)
+    kymaapi_vision_model: str = "gemini-2.5-flash"         # primary — confirmed working on KymaAPI
+    kymaapi_vision_model_fallback: str = "gemini-2.5-flash" # same model as fallback
     kymaapi_video_model: str = "kling-3-pro"
     kymaapi_image_model: str = "flux-1.1-ultra"
     kymaapi_tts_model: str = "eleven-multilingual-v2"

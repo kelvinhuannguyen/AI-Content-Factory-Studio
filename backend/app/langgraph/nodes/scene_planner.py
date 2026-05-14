@@ -78,12 +78,23 @@ async def scene_planner_node(state: ProductionState) -> dict:
             for s in scenes_saved:
                 await db.refresh(s)
 
-            scenes_out = [_scene_to_dict(s) for s in scenes_saved]
+            # Build plain-dict scenes (no enum objects) — avoids LangGraph checkpointer issues
+            scenes_out = [
+                {
+                    "id": str(s.id),
+                    "scene_number": s.scene_number,
+                    "title": s.title or f"Cảnh {s.scene_number}",
+                    "description": s.description or "",
+                    "video_prompt": s.video_prompt or "",
+                    "duration_seconds": s.duration_seconds or 10,
+                    "characters_in_scene": s.characters_in_scene or [],
+                }
+                for s in scenes_saved
+            ]
 
     except Exception as e:
         logger.error("scene_planner_node error: %s", e)
         await publish_event(project_id, {"type": "agent_error", "agent": "scene_planner", "error": str(e)})
-        # Return empty scenes — scene_review will not send email if scenes=[]
         return {"error": str(e), "scenes": [], "current_stage": "scene_planner"}
 
     await publish_event(project_id, {
@@ -101,13 +112,14 @@ async def scene_planner_node(state: ProductionState) -> dict:
 
 
 async def scene_review_node(state: ProductionState) -> dict:
-    """Auto-approve: no interrupt. Scenes pass directly to cinematic_decomposer."""
-    scenes = state.get("scenes", [])
+    """Auto-approve: no interrupt. Query DB directly to avoid state deserialization issues."""
     project_id = state["project_id"]
 
-    # Auto-retry if scene_planner failed
-    if not scenes:
-        logger.warning("scene_review: no scenes — retrying scene_planner")
+    # Query DB — never trust state["scenes"] which may have stale/corrupt data
+    has_scenes = await _scenes_exist_in_db(project_id)
+
+    if not has_scenes:
+        logger.warning("scene_review: no scenes in DB — retrying scene_planner")
         await publish_event(project_id, {
             "type": "agent_start",
             "agent": "scene_planner",
@@ -120,6 +132,26 @@ async def scene_review_node(state: ProductionState) -> dict:
         "current_stage": "cinematic_decomposer",
         "paused_at": None,
     }
+
+
+async def _scenes_exist_in_db(project_id: str) -> bool:
+    """Return True if any scenes exist in DB for this project."""
+    try:
+        from ...database import AsyncSessionLocal
+        from ...models.scene import Scene
+        from sqlalchemy import select, func
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(func.count()).select_from(Scene).where(
+                    Scene.project_id == uuid.UUID(project_id)
+                )
+            )
+            count = result.scalar()
+            return (count or 0) > 0
+    except Exception as e:
+        logger.warning("_scenes_exist_in_db error: %s", e)
+        return False
 
 
 def route_after_scene_review(state: ProductionState) -> str:

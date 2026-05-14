@@ -243,7 +243,7 @@ async def _decompose_scene(scene: dict, lookbook: dict, state: ProductionState) 
             CINEMATIC_DECOMPOSER_SYSTEM,
             user_prompt,
             temperature=0.3,
-            max_tokens=2048,
+            max_tokens=4096,
         )
         shots: list[dict] = result.get("shots", [])
 
@@ -302,12 +302,25 @@ async def _clear_shots(project_id: str) -> None:
 async def _save_shots(scene_id: str, project_id: str, shot_dicts: list[dict]) -> list[dict]:
     """
     Save shot dicts to DB and return saved dicts with DB ids.
+    FK guard: verify scene exists before inserting (prevents ForeignKeyViolationError
+    if scene was deleted by a concurrent scene_planner re-run).
     """
     from ...database import AsyncSessionLocal
     from ...models.shot import Shot
+    from ...models.scene import Scene
 
     saved: list[dict] = []
     async with AsyncSessionLocal() as db:
+        # FK guard — if scene was deleted by a re-plan, skip silently
+        scene_exists = await db.get(Scene, uuid.UUID(scene_id))
+        if not scene_exists:
+            logger.error(
+                "_save_shots: scene %s not found in DB — skipping %d shots "
+                "(scene may have been deleted by a concurrent re-plan)",
+                scene_id, len(shot_dicts),
+            )
+            return []
+
         for s in shot_dicts:
             shot = Shot(
                 scene_id=uuid.UUID(scene_id),
