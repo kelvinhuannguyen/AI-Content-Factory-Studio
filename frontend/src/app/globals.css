@@ -3,93 +3,97 @@
 @tailwind utilities;
 
 @layer base {
-  /* ── Light mode — trắng dịu, shadow thay border ─────────────────── */
+  /* ── Light mode — Off-white + Emerald Green (ui3: Donezo style) ─── */
   :root {
-    --background: 220 20% 97%;            /* #f4f5f7 — xám trắng rất nhẹ */
-    --foreground: 220 25% 10%;            /* gần đen, không harsh */
+    --background: 150 20% 97%;            /* Off-white with subtle green tint */
+    --foreground: 220 25% 10%;            /* near-black, not harsh */
 
-    --card: 0 0% 100%;                    /* card = trắng tinh */
+    --card: 0 0% 100%;                    /* pure white cards */
     --card-foreground: 220 25% 10%;
 
     --popover: 0 0% 100%;
     --popover-foreground: 220 25% 10%;
 
-    --primary: 262.1 75% 52%;             /* violet đậm hơn chút */
+    --primary: 160 58% 35%;               /* Emerald Green #2d9e6e */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 15% 93%;
+    --secondary: 150 15% 93%;
     --secondary-foreground: 220 20% 20%;
 
-    --muted: 220 15% 93%;
+    --muted: 150 15% 93%;
     --muted-foreground: 220 10% 50%;
 
-    --accent: 262 80% 96%;               /* violet rất nhạt */
-    --accent-foreground: 262 75% 40%;
+    --accent: 160 50% 93%;               /* light green accent bg */
+    --accent-foreground: 160 58% 25%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 15% 89%;               /* border nhạt, gần như ẩn */
-    --input: 220 15% 89%;
-    --ring: 262.1 75% 52%;
+    --border: 150 15% 88%;               /* subtle green-tinted border */
+    --input: 150 15% 88%;
+    --ring: 160 58% 35%;
 
-    --highlight: 262.1 75% 52%;
-    --radius: 0.875rem;
+    --highlight: 160 58% 35%;
+    --radius: 1.5rem;                     /* 24px — large friendly radius */
 
     /* Sidebar */
     --sidebar-bg: 0 0% 100%;
-    --sidebar-border: 220 15% 91%;
-    --sidebar-item-hover: 262 60% 96%;
-    --sidebar-item-active: 262 70% 93%;
-    --sidebar-item-active-text: 262 75% 38%;
+    --sidebar-border: 150 15% 91%;
+    --sidebar-item-hover: 160 40% 95%;
+    --sidebar-item-active: 160 45% 91%;
+    --sidebar-item-active-text: 160 60% 28%;
 
-    /* Shadow tokens for card depth */
-    --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.04);
-    --shadow-md: 0 4px 12px 0 rgb(0 0 0 / 0.07), 0 2px 4px -1px rgb(0 0 0 / 0.04);
-    --shadow-lg: 0 8px 24px 0 rgb(0 0 0 / 0.09), 0 4px 8px -2px rgb(0 0 0 / 0.05);
+    /* Shadow tokens — more pronounced for Bento depth */
+    --shadow-sm: 0 1px 4px 0 rgb(0 0 0 / 0.07), 0 1px 2px -1px rgb(0 0 0 / 0.05);
+    --shadow-md: 0 4px 16px 0 rgb(0 0 0 / 0.09), 0 2px 6px -1px rgb(0 0 0 / 0.06);
+    --shadow-lg: 0 8px 32px 0 rgb(0 0 0 / 0.11), 0 4px 10px -2px rgb(0 0 0 / 0.07);
   }
 
-  /* ── Dark mode — đen sâu, tương phản rõ ─────────────────────────── */
+  /* ── Dark mode — Deep Navy + Vibrant Orange + Teal Neon (ui1/ui2 style) ── */
   .dark {
-    --background: 224 28% 6%;             /* #0a0c14 — đen xanh rất sâu */
-    --foreground: 220 20% 94%;            /* trắng ấm */
+    --background: 226 52% 9%;             /* #0A0F1E — Deep Navy */
+    --foreground: 210 30% 95%;            /* clean white */
 
-    --card: 224 24% 9%;                   /* #10131e — card đen hơi xanh */
-    --card-foreground: 220 20% 94%;
+    --card: 226 42% 12%;                  /* #0D1226 — darker navy card */
+    --card-foreground: 210 30% 95%;
 
-    --popover: 224 24% 9%;
-    --popover-foreground: 220 20% 94%;
+    --popover: 226 42% 12%;
+    --popover-foreground: 210 30% 95%;
 
-    --primary: 263 85% 72%;              /* violet sáng hơn trên nền đen */
-    --primary-foreground: 224 28% 6%;
+    --primary: 24 95% 58%;               /* Vibrant Orange #FF7A32 */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 224 20% 14%;
-    --secondary-foreground: 220 15% 80%;
+    --secondary: 226 30% 16%;
+    --secondary-foreground: 210 20% 75%;
 
-    --muted: 224 20% 13%;
-    --muted-foreground: 220 12% 52%;
+    --muted: 226 28% 14%;
+    --muted-foreground: 220 15% 52%;
 
-    --accent: 224 20% 14%;
-    --accent-foreground: 220 15% 80%;
+    --accent: 226 28% 16%;
+    --accent-foreground: 210 20% 80%;
 
     --destructive: 0 65% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 224 18% 15%;              /* border rất tối, tinh tế */
-    --input: 224 18% 15%;
-    --ring: 263 85% 72%;
+    --border: 226 25% 18%;              /* subtle dark border */
+    --input: 226 25% 18%;
+    --ring: 24 95% 58%;                 /* orange ring */
 
-    --highlight: 186 90% 62%;           /* cyan — điểm nhấn trên đen */
-    --radius: 0.875rem;
+    --highlight: 186 90% 60%;           /* Teal Neon #14E4D4 */
+    --radius: 1.5rem;
+
+    /* Glow tokens */
+    --glow-orange: 0 0 24px rgba(255, 122, 50, 0.35), 0 4px 24px rgba(0, 0, 0, 0.4);
+    --glow-teal:   0 0 24px rgba(20, 228, 212, 0.35), 0 4px 24px rgba(0, 0, 0, 0.4);
 
     /* Sidebar */
-    --sidebar-bg: 224 30% 5%;
-    --sidebar-border: 224 18% 12%;
-    --sidebar-item-hover: 263 30% 13%;
-    --sidebar-item-active: 263 40% 18%;
-    --sidebar-item-active-text: 263 80% 78%;
+    --sidebar-bg: 226 52% 7%;            /* darker sidebar */
+    --sidebar-border: 226 30% 13%;
+    --sidebar-item-hover: 226 30% 14%;
+    --sidebar-item-active: 24 60% 14%;   /* orange-tinted active bg */
+    --sidebar-item-active-text: 24 90% 65%; /* orange text on active */
 
-    /* Shadow tokens (ít dùng trên dark) */
+    /* Shadow tokens */
     --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.3);
     --shadow-md: 0 4px 12px 0 rgb(0 0 0 / 0.4);
     --shadow-lg: 0 8px 24px 0 rgb(0 0 0 / 0.5);
@@ -108,26 +112,44 @@
   }
 }
 
-/* ── Card với shadow thay vì border nặng (light mode) ───────────── */
+/* ── Glassmorphism utilities ─────────────────────────────────────────── */
 @layer utilities {
-  .card-shadow {
-    box-shadow: var(--shadow-sm);
+  /* Dark-mode frosted glass card */
+  .glass {
+    background: rgba(13, 18, 38, 0.65);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.07);
   }
-  .card-shadow-md {
-    box-shadow: var(--shadow-md);
+  /* Light-mode frosted glass */
+  .glass-light {
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
-  .card-shadow-lg {
-    box-shadow: var(--shadow-lg);
+
+  /* Glow shadows */
+  .glow-orange { box-shadow: var(--glow-orange, 0 4px 24px rgba(0, 0, 0, 0.3)); }
+  .glow-teal   { box-shadow: var(--glow-teal, 0 4px 24px rgba(0, 0, 0, 0.3)); }
+  .glow-hover  { transition: box-shadow 0.25s ease, transform 0.2s ease; }
+  .glow-hover:hover {
+    box-shadow: var(--glow-orange, 0 4px 24px rgba(0, 0, 0, 0.3));
+    transform: translateY(-1px);
   }
+
+  /* Card shadow utilities */
+  .card-shadow    { box-shadow: var(--shadow-sm); }
+  .card-shadow-md { box-shadow: var(--shadow-md); }
+  .card-shadow-lg { box-shadow: var(--shadow-lg); }
 }
 
-/* ── Custom scrollbar — mỏng, tinh tế ──────────────────────────────── */
+/* ── Custom scrollbar — thin, subtle ─────────────────────────────────── */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { @apply bg-transparent; }
 ::-webkit-scrollbar-thumb { @apply bg-border rounded-full; }
 ::-webkit-scrollbar-thumb:hover { opacity: 0.8; }
 
-/* ── Animations ─────────────────────────────────────────────────────── */
+/* ── Animations ──────────────────────────────────────────────────────── */
 @keyframes progress-indeterminate {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
@@ -142,4 +164,20 @@
 }
 .animate-fade-in {
   animation: fade-in 0.25s ease-out both;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(255, 122, 50, 0.25); }
+  50%       { box-shadow: 0 0 28px rgba(255, 122, 50, 0.55); }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-4px); }
+}
+.animate-float {
+  animation: float 3s ease-in-out infinite;
 }

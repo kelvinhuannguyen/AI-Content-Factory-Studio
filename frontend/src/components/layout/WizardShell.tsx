@@ -45,11 +45,11 @@ export function WizardShell({ steps, currentStepId, children, title, onReset }: 
               <li key={step.id} className="flex items-center gap-3">
                 <div
                   className={cn(
-                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold transition-all duration-300",
                     isDone
-                      ? "bg-primary text-primary-foreground"
+                      ? "bg-primary text-primary-foreground shadow-[0_0_10px_hsl(var(--primary)/0.4)]"
                       : isCurrent
-                      ? "border-2 border-primary text-primary"
+                      ? "border-2 border-primary bg-primary/15 text-primary font-bold"
                       : "border border-border text-muted-foreground"
                   )}
                 >

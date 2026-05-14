@@ -13,7 +13,8 @@ const PRODUCTION_MODES = [
     title: "Video ngắn",
     subtitle: "Reels · Shorts · TikTok",
     meta: "15s – 3 phút · 9:16",
-    gradient: "from-violet-500 to-purple-700",
+    gradient: "from-orange-500 to-amber-500",
+    glowClass: "dark:shadow-[0_0_16px_rgba(255,122,50,0.35)]",
     tag: "Phổ biến",
   },
   {
@@ -23,7 +24,8 @@ const PRODUCTION_MODES = [
     title: "Video dài",
     subtitle: "YouTube · Documentary",
     meta: "5 phút – 3 giờ · 16:9",
-    gradient: "from-blue-500 to-indigo-700",
+    gradient: "from-teal-500 to-cyan-500",
+    glowClass: "dark:shadow-[0_0_16px_rgba(20,228,212,0.35)]",
     tag: "YouTube",
   },
   {
@@ -33,7 +35,8 @@ const PRODUCTION_MODES = [
     title: "MV ca nhạc",
     subtitle: "Music Video · Suno AI",
     meta: "Không giới hạn · 16:9 / 9:16",
-    gradient: "from-pink-500 to-rose-700",
+    gradient: "from-pink-500 to-rose-500",
+    glowClass: "dark:shadow-[0_0_16px_rgba(236,72,153,0.35)]",
     tag: "Nhạc AI",
   },
 ];
@@ -50,13 +53,13 @@ export default function DashboardPage() {
 
       {/* Quick-start cards */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {PRODUCTION_MODES.map(({ href, icon: Icon, metaIcon: MetaIcon, title, subtitle, meta, gradient, tag }) => (
+        {PRODUCTION_MODES.map(({ href, icon: Icon, metaIcon: MetaIcon, title, subtitle, meta, gradient, glowClass, tag }) => (
           <Link
             key={href}
             href={href}
-            className="group flex items-center gap-4 rounded-2xl bg-card border border-border/50 card-shadow px-4 py-3.5 transition-all duration-200 hover:card-shadow-md hover:-translate-y-0.5"
+            className="group flex items-center gap-4 rounded-2xl bg-card border border-border/50 card-shadow px-4 py-3.5 transition-all duration-200 hover:card-shadow-md hover:-translate-y-0.5 dark:glass glow-hover"
           >
-            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient}`}>
+            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} ${glowClass}`}>
               <Icon className="h-5 w-5 text-white" />
             </div>
             <div className="min-w-0 flex-1">

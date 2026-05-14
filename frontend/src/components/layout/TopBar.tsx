@@ -20,8 +20,8 @@ export function TopBar() {
           <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-primary" />
         </button>
 
-        {/* Avatar */}
-        <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-purple-700 text-[11px] font-bold text-white select-none">
+        {/* Avatar — orange gradient in dark, emerald in light */}
+        <div className="ml-1 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary/70 text-[11px] font-bold text-primary-foreground select-none">
           AI
         </div>
       </div>

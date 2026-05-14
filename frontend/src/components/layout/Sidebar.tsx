@@ -24,10 +24,10 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="fixed inset-y-0 left-0 z-50 flex w-56 flex-col border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))]">
+    <aside className="fixed inset-y-0 left-0 z-50 flex w-56 flex-col border-r border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-bg))] dark:glass">
       {/* Logo */}
       <div className="flex h-14 items-center gap-2.5 px-5 border-b border-[hsl(var(--sidebar-border))]">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary">
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-primary dark:animate-glow-pulse">
           <Sparkles className="h-3.5 w-3.5 text-primary-foreground" />
         </div>
         <div className="flex flex-col leading-tight">
@@ -40,7 +40,7 @@ export function Sidebar() {
       <div className="px-3 pt-4 pb-2">
         <Link
           href="/create"
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-all glow-hover"
         >
           <Plus className="h-4 w-4" />
           Tạo mới
@@ -56,12 +56,16 @@ export function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+                "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
                 isActive
                   ? "bg-[hsl(var(--sidebar-item-active))] text-[hsl(var(--sidebar-item-active-text))]"
                   : "text-muted-foreground hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground"
               )}
             >
+              {/* Left edge glow bar on active */}
+              {isActive && (
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-primary" />
+              )}
               <Icon className="h-4 w-4 shrink-0" />
               {label}
             </Link>
@@ -74,12 +78,15 @@ export function Sidebar() {
         <Link
           href="/settings"
           className={cn(
-            "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all",
+            "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
             pathname === "/settings"
               ? "bg-[hsl(var(--sidebar-item-active))] text-[hsl(var(--sidebar-item-active-text))]"
               : "text-muted-foreground hover:bg-[hsl(var(--sidebar-item-hover))] hover:text-foreground"
           )}
         >
+          {pathname === "/settings" && (
+            <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-primary" />
+          )}
           <Settings className="h-4 w-4 shrink-0" />
           Cài đặt
         </Link>
