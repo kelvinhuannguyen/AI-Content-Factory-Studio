@@ -27,3 +27,13 @@ class Character(UUIDBase):
         Enum(CharacterSource), nullable=False, default=CharacterSource.ai_generated
     )
     user_ref_r2_key: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    # IP Character Pipeline fields (migration 003)
+    character_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ref_id: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    visual_identity_string: Mapped[str | None] = mapped_column(Text, nullable=True)
+    character_role: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    physical_dna: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    color_palette: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    sheet_r2_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    user_prompt_addition: Mapped[str | None] = mapped_column(Text, nullable=True)

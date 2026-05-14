@@ -1,4 +1,13 @@
-"""Agent Character Designer — trigger Celery để tạo ảnh + điểm dừng chọn nhân vật."""
+"""Agent Character Designer — IP Character Production Pipeline.
+
+Flow:
+  character_designer_node:
+    Stage 1-3: IP Architect LLM → extract N characters with VIS + Ref IDs
+    Stage 4:   Pure Python → build image prompts
+    Stage 5:   Generate 1 hero portrait per character (concurrent)
+  character_review_node:
+    Interrupt → user reviews all N characters, approves all or regenerates specific ones
+"""
 from __future__ import annotations
 import asyncio
 import logging
@@ -15,54 +24,94 @@ from ..state import ProductionState
 
 logger = logging.getLogger(__name__)
 
-_POLL_INTERVAL = 5    # giây
-_POLL_TIMEOUT  = 300  # 5 phút max
-
 
 async def character_designer_node(state: ProductionState) -> dict:
     """
-    Agent Character Designer:
-    1. Trigger Celery task generate_character_variants (reuse existing task)
-    2. Poll DB mỗi 5s cho đến khi đủ 3 characters hoàn thành
-    3. Update Project.status → character_selected (stage xong)
-    4. Publish SSE event
+    IP Character Production Pipeline:
+    1. IP Architect (LLM): parse script → extract N characters with VIS, DNA, Ref IDs
+    2. Generate 1 hero portrait per character (concurrent) using VIS-anchored prompts
+    3. Return all characters to character_review_node
     """
     project_id = state["project_id"]
-    description = state.get("character_description") or "Nhân vật chính phù hợp với nội dung video"
-    name = state.get("character_name") or ""
+    script_content = state.get("script_content") or ""
 
     await publish_event(project_id, {
         "type": "agent_start",
         "agent": "character_designer",
-        "message": "Đang khởi tạo tạo nhân vật...",
+        "message": "Đang phân tích kịch bản để thiết kế nhân vật...",
     })
 
-    # Generate characters directly (no Celery worker needed — runs inline in BackgroundTask)
-    try:
-        from ...tasks.character_tasks import _generate_variants_async
-        await _generate_variants_async(None, project_id, description, name, None)
-        logger.info("Character generation complete for project %s", project_id)
-    except Exception as e:
-        logger.error("Character generation failed: %s", e)
-        await publish_event(project_id, {"type": "agent_error", "agent": "character_designer", "error": str(e)})
-        return {"error": str(e), "current_stage": "character_designer"}
+    # Stage 1-4: IP Pipeline
+    from .character_ip_pipeline import _run_ip_pipeline, _build_fallback_profile
 
-    # Query DB for the generated characters (with R2 URLs)
-    characters = await _wait_for_characters(project_id)
+    if script_content:
+        try:
+            ip_result = await _run_ip_pipeline(state, script_content)
+        except Exception as e:
+            logger.error("IP pipeline failed, using fallback: %s", e)
+            main = _build_fallback_profile(
+                state.get("character_name") or "",
+                state.get("character_description") or "",
+            )
+            ip_result = {
+                "character_profiles": [main],
+                "character_vis_map": {"#CHAR_01": main["visual_identity_string"]},
+                "main_profile": main,
+                "supporting_profiles": [],
+            }
+    else:
+        # No script yet — use user hints
+        main = _build_fallback_profile(
+            state.get("character_name") or "",
+            state.get("character_description") or "",
+        )
+        ip_result = {
+            "character_profiles": [main],
+            "character_vis_map": {"#CHAR_01": main["visual_identity_string"]},
+            "main_profile": main,
+            "supporting_profiles": [],
+        }
 
-    if not characters:
-        err = "Hết thời gian chờ tạo nhân vật (>5 phút)"
-        await publish_event(project_id, {"type": "agent_error", "agent": "character_designer", "error": err})
-        return {"error": err, "current_stage": "character_designer"}
+    profiles = ip_result["character_profiles"]
+    character_vis_map = ip_result["character_vis_map"]
+
+    await publish_event(project_id, {
+        "type": "agent_start",
+        "agent": "character_designer",
+        "character_count": len(profiles),
+        "message": f"Xác định {len(profiles)} nhân vật — đang tạo ảnh...",
+    })
+
+    # Stage 5: Delete old characters, generate new ones concurrently
+    from sqlalchemy import delete
+    async with AsyncSessionLocal() as db:
+        await db.execute(delete(Character).where(Character.project_id == uuid.UUID(project_id)))
+        await db.commit()
+
+    from ...tasks.character_tasks import _generate_character_image_async
+    if profiles:
+        await asyncio.gather(*[
+            _generate_character_image_async(project_id, p) for p in profiles
+        ])
+    else:
+        # 0 characters (narration-only script) — skip generation
+        logger.info("No characters found in script — narration-only video")
+
+    from ...tasks.character_tasks import _load_characters
+    characters = await _load_characters(project_id)
 
     await publish_event(project_id, {
         "type": "agent_done",
         "agent": "character_designer",
-        "characters": characters,
-        "message": f"Đã tạo {len(characters)} biến thể nhân vật. Vui lòng chọn 1 biến thể.",
+        "character_count": len(characters),
+        "message": f"Đã thiết kế {len(characters)} nhân vật. Kiểm tra và duyệt.",
     })
 
     return {
+        "extracted_characters": profiles,
+        "character_profiles": profiles,
+        "character_vis_map": character_vis_map,
+        "character_count": len(characters),
         "characters": characters,
         "error": None,
         "current_stage": "character_review",
@@ -71,11 +120,9 @@ async def character_designer_node(state: ProductionState) -> dict:
 
 async def character_review_node(state: ProductionState) -> dict:
     """
-    Điểm dừng chọn nhân vật:
-    - Gửi email Gmail thông báo nhân vật đã tạo xong
-    - Email Approve → tự động chọn biến thể 1 (variant_index=0)
-    - Email Reject → huỷ, tạo lại
-    - GUI: user chọn biến thể bất kỳ qua POST /pipeline/{id}/resume
+    Human-in-the-loop review of N character designs.
+    Email: "Approve All / Regenerate" buttons.
+    Dashboard: user can customize + regenerate individual characters, then approve all.
     """
     project_id = state["project_id"]
     characters = state.get("characters", [])
@@ -85,10 +132,11 @@ async def character_review_node(state: ProductionState) -> dict:
         "type": "agent_interrupt",
         "step": "character_review",
         "characters": characters,
-        "message": f"Da tao {n} bien the nhan vat. Da gui email duyet.",
+        "character_count": n,
+        "message": f"Đã thiết kế {n} nhân vật. Kiểm tra và duyệt.",
     })
 
-    # Lấy project title
+    # Get project title for email
     project_title = "Du an moi"
     try:
         pid = uuid.UUID(project_id)
@@ -99,10 +147,9 @@ async def character_review_node(state: ProductionState) -> dict:
     except Exception:
         pass
 
-    # Gửi email — Approve sẽ tự chọn variant 0, Reject tạo lại
     extra = (
-        f"{n} bien the nhan vat da san sang. "
-        "Nhan Duyet de chon bien the 1 (mac dinh) hoac vao Dashboard de chon tu tay."
+        f"{n} nhan vat da duoc thiet ke theo chuan IP Character. "
+        "Nhan 'Duyet Tat Ca' de tien hanh phan canh, hoac vao Dashboard de chinh sua tung nhan vat."
     )
     try:
         await send_approval_request(
@@ -119,76 +166,43 @@ async def character_review_node(state: ProductionState) -> dict:
         "characters": characters,
     })
 
-    selected_id: str = decision.get("selected_character_id", "")
-    approved: bool = bool(selected_id) or decision.get("approved", False)
+    approved: bool = decision.get("approved", False)
 
-    # Nếu approve qua email (không có selected_character_id) → auto-select variant 0
-    if approved and not selected_id and characters:
-        selected_id = characters[0].get("id", "")
-
-    if approved and selected_id:
-        # Mark selected in DB + update project status
-        await _mark_character_selected(state["project_id"], selected_id)
+    if approved:
+        await _mark_all_characters_approved(project_id)
+        # Rebuild vis_map from DB (in case user regenerated characters while waiting)
+        from ...tasks.character_tasks import _load_characters
+        from ...services.r2_service import public_url
+        fresh_chars = await _load_characters(project_id)
+        vis_map = {
+            c["ref_id"]: c["visual_identity_string"]
+            for c in fresh_chars
+            if c.get("ref_id") and c.get("visual_identity_string")
+        }
+    else:
+        vis_map = {}
 
     return {
-        "selected_character_id": selected_id if approved else None,
         "character_approved": approved,
+        "character_vis_map": vis_map if approved else state.get("character_vis_map", {}),
         "approval_status": "approved" if approved else "rejected",
         "current_stage": "scene_planner" if approved else "character_designer",
     }
 
 
 def route_after_character_review(state: ProductionState) -> str:
-    """approved → scene_planner; rejected → character_designer (regenerate)."""
+    """approved → scene_planner; rejected → character_designer (regenerate all)."""
     return "scene_planner" if state.get("character_approved") else "character_designer"
 
 
-async def _wait_for_characters(project_id: str) -> list[dict]:
-    """Poll DB until 3 characters with image_r2_key exist (or timeout)."""
-    waited = 0
+async def _mark_all_characters_approved(project_id: str) -> None:
+    """Mark all characters for this project as approved and update project status."""
     pid = uuid.UUID(project_id)
-    while waited < _POLL_TIMEOUT:
-        async with AsyncSessionLocal() as db:
-            from sqlalchemy import select
-            result = await db.execute(
-                select(Character)
-                .where(Character.project_id == pid, Character.image_r2_key.isnot(None))
-                .order_by(Character.variant_index)
-            )
-            chars = result.scalars().all()
-            if len(chars) >= 3:
-                from ...services.r2_service import public_url, generate_presigned_url
-                out = []
-                for c in chars[:3]:
-                    url = public_url(c.image_r2_key)
-                    if url is None and c.image_r2_key:
-                        try:
-                            url = await generate_presigned_url(c.image_r2_key)
-                        except Exception:
-                            url = None
-                    out.append({
-                        "id": str(c.id),
-                        "variant_index": c.variant_index,
-                        "image_r2_key": c.image_r2_key,
-                        "image_url": url,
-                        "name": c.name,
-                        "description": c.description,
-                    })
-                return out
-        await asyncio.sleep(_POLL_INTERVAL)
-        waited += _POLL_INTERVAL
-    return []
-
-
-async def _mark_character_selected(project_id: str, character_id: str) -> None:
-    """Mark selected character in DB and update project status."""
-    pid = uuid.UUID(project_id)
-    cid = uuid.UUID(character_id)
     async with AsyncSessionLocal() as db:
         from sqlalchemy import select
         chars = await db.execute(select(Character).where(Character.project_id == pid))
         for char in chars.scalars().all():
-            char.is_selected = (char.id == cid)
+            char.is_selected = True
         proj = await db.get(Project, pid)
         if proj:
             proj.status = ProjectStatus.character_selected

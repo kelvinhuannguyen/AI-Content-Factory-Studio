@@ -21,5 +21,15 @@ class CharacterOut(BaseModel):
     is_selected: bool
     source: CharacterSource
     user_ref_r2_key: str | None
+    # IP Character Pipeline fields
+    character_index: int = 0
+    ref_id: str | None = None
+    visual_identity_string: str | None = None
+    character_role: str | None = None
+    physical_dna: dict | None = None
+    color_palette: dict | None = None
+    sheet_r2_key: str | None = None
+    sheet_url: str | None = None
+    user_prompt_addition: str | None = None
 
     model_config = {"from_attributes": True}

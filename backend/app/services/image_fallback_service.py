@@ -28,7 +28,7 @@ class ImageGenError(Exception):
     pass
 
 
-async def _kymaapi_generate(prompt: str) -> bytes:
+async def _kymaapi_generate(prompt: str, negative_prompt: str = "") -> bytes:
     """Submit a flux-1.1-ultra job to KymaAPI and poll until done."""
     headers = {
         "Authorization": f"Bearer {settings.kymaapi_key}",
@@ -38,6 +38,8 @@ async def _kymaapi_generate(prompt: str) -> bytes:
         "model": settings.kymaapi_image_model,  # flux-1.1-ultra
         "prompt": prompt,
     }
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(_KYMA_IMAGES_URL, headers=headers, json=payload)
@@ -96,6 +98,7 @@ async def _download_url(url: str) -> bytes:
 
 async def generate_image(
     prompt: str,
+    negative_prompt: str = "",
     variant_index: int = 0,
     ref_image_bytes: bytes | None = None,
 ) -> tuple[bytes, str]:
@@ -113,7 +116,7 @@ async def generate_image(
     # 2. Try KymaAPI
     if settings.kymaapi_key:
         try:
-            img = await _kymaapi_generate(prompt)
+            img = await _kymaapi_generate(prompt, negative_prompt=negative_prompt)
             return img, "kymaapi"
         except ImageGenError as e:
             logger.warning("KymaAPI failed: %s", e)

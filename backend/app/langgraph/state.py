@@ -22,9 +22,14 @@ class ProductionState(TypedDict):
     # ── Agent Character Designer ──────────────────────────────────────────
     character_description: Optional[str]
     character_name: Optional[str]
-    characters: list[dict]            # [{id, variant_index, image_r2_key, image_url}]
+    characters: list[dict]            # [{id, ref_id, character_index, image_url, ...}]
     selected_character_id: Optional[str]
     character_approved: bool          # kết quả duyệt từ human interrupt
+    # IP Character Pipeline fields
+    extracted_characters: Optional[list]    # raw profiles from IP Architect
+    character_profiles: Optional[list]      # enriched profiles with VIS + Ref IDs
+    character_vis_map: Optional[dict]       # {"#CHAR_01": vis_string, "#CHAR_02": ...}
+    character_count: Optional[int]          # number of characters found in script
 
     # ── Video Pipeline ────────────────────────────────────────────────────
     scenes: list[dict]                # [{id, scene_number, video_prompt, duration_seconds}]
@@ -79,6 +84,10 @@ def initial_state(
         characters=[],
         selected_character_id=None,
         character_approved=False,
+        extracted_characters=None,
+        character_profiles=None,
+        character_vis_map=None,
+        character_count=None,
         # Video Pipeline
         scenes=[],
         video_clips=[],

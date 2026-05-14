@@ -55,6 +55,7 @@ async def scene_planner_node(state: ProductionState) -> dict:
                 script=script,
                 project=proj,
                 character_description=state.get("character_description") or "",
+                vis_map=state.get("character_vis_map") or {},
             )
 
             # Xóa cũ và lưu mới
@@ -71,6 +72,7 @@ async def scene_planner_node(state: ProductionState) -> dict:
                     video_prompt=s.get("video_prompt", ""),
                     duration_seconds=s.get("duration_seconds", 10),
                     status=SceneStatus.pending,
+                    characters_in_scene=s.get("characters_in_scene") or [],
                 )
                 db.add(scene)
                 scenes_saved.append(scene)

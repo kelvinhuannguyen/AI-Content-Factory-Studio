@@ -102,9 +102,10 @@ Trả về JSON với format:
 
 
 # ── Scene breakdown → video prompts ─────────────────────────────────────
-SCENE_PROMPT_SYSTEM = """Bạn là chuyên gia tạo prompt cho AI video generation (Seedance, Kling AI, RunwayML).
-Nhiệm vụ: chuyển đổi mô tả cảnh quay thành video prompt tối ưu cho AI.
-Trả về JSON hợp lệ."""
+SCENE_PROMPT_SYSTEM = """You are an expert at creating prompts for AI video generation (Seedance, Kling AI, RunwayML).
+Task: convert scene descriptions into optimized video prompts for AI.
+When a character_vis_map is provided, embed the Visual Identity String verbatim for each character present.
+Return ONLY valid JSON. No markdown, no explanation outside JSON."""
 
 def scene_prompt_user(
     scene_title: str,
@@ -114,23 +115,153 @@ def scene_prompt_user(
     genre: str,
     style: str,
     production_type: str,
+    vis_map: dict | None = None,
 ) -> str:
     aspect = "9:16 vertical" if production_type == "short_video" else "16:9 widescreen"
-    return f"""Tạo video prompt cho AI video generation từ cảnh sau:
-- Cảnh: {scene_title}
-- Mô tả: {shot_description}
-- Narration: {narration}
-- Nhân vật: {character_description}
-- Thể loại: {genre} | Phong cách: {style} | Tỉ lệ: {aspect}
 
-Trả về JSON:
+    if vis_map:
+        char_lines = "\n".join(
+            f"  - {ref_id}: {vis}" for ref_id, vis in vis_map.items()
+        )
+        char_section = f"""- CHARACTER VISUAL IDENTITY MAP (immutable — do not deviate):
+{char_lines}
+- Detect which characters from the map are PHYSICALLY PRESENT in this scene based on the action.
+  Return their ref_ids in the characters_in_scene field."""
+        chars_field = '"characters_in_scene": ["#CHAR_01"]'
+    else:
+        char_section = f"- Nhân vật: {character_description}"
+        chars_field = '"characters_in_scene": []'
+
+    return f"""Create a video prompt for AI video generation from this scene:
+- Scene: {scene_title}
+- Description: {shot_description}
+- Narration: {narration}
+{char_section}
+- Genre: {genre} | Style: {style} | Aspect: {aspect}
+
+CHARACTER CONSISTENCY RULES (when vis_map provided):
+- Each character's VIS is their semantic invariant — embed it verbatim if they appear
+- Do NOT mix traits between characters
+- If 2+ characters appear together, note both ref_ids in characters_in_scene
+
+Return JSON:
 {{
-  "video_prompt": "Prompt tiếng Anh chi tiết cho Seedance/Kling, bao gồm: subject, action, environment, camera movement, lighting, mood, style. Tối thiểu 50 từ.",
-  "negative_prompt": "Những gì cần tránh (blur, watermark, text, ugly, deformed...)"
+  "video_prompt": "Detailed English prompt for Seedance/Kling: subject, action, environment, camera movement, lighting, mood, style. Min 50 words.",
+  "negative_prompt": "What to avoid (blur, watermark, text, ugly, deformed...)",
+  {chars_field}
 }}"""
 
 
-# ── Character design prompt ──────────────────────────────────────────────
+# ── Character IP Architect (Industry-standard IP character pipeline) ──────
+CHARACTER_IP_ARCHITECT_SYSTEM = """You are a Character IP Architect for a professional video production pipeline.
+Your task: analyze the video script, extract ALL named or implied characters, and build complete "Character DNA" profiles.
+
+CRITICAL RULE: Every physical trait you define is a SEMANTIC INVARIANT — it MUST appear in every generated image of that character without exception. Be specific, concrete, and immutable. Never use vague terms like "attractive" or "beautiful".
+
+You will output ONLY a valid JSON object. No markdown fences, no explanation text outside the JSON."""
+
+
+def character_ip_architect_user(
+    script_content: str,
+    character_name_hint: str,
+    character_description_hint: str,
+    genre: str,
+    style: str,
+) -> str:
+    """Single LLM call handling Script Parser + Character Profiler + ID & Consistency Manager."""
+    name_hint = f"User named the main character: \"{character_name_hint}\"." if character_name_hint.strip() else ""
+    desc_hint = f"User description hint: \"{character_description_hint}\"." if character_description_hint.strip() else ""
+    hints = " ".join(filter(None, [name_hint, desc_hint]))
+
+    return f"""Analyze this video script and extract ALL characters present.
+{hints}
+Genre: {genre} | Style: {style}
+
+SCRIPT:
+---
+{script_content[:3000]}
+---
+
+Rules:
+- Extract the EXACT number of characters in the script — do not invent or omit
+- Max 3 characters total (prioritize by screen time if more than 3 exist)
+- Supporting characters only if they appear in 2+ scenes with meaningful role
+- If user provided name/description hints, apply them to the main character (#CHAR_01)
+- If script is narration-only with no people, return empty characters array
+- VIS must be a single dense sentence an image model can use directly as a prompt prefix
+
+Return this exact JSON (no markdown, no extra text):
+{{
+  "characters": [
+    {{
+      "ref_id": "#CHAR_01",
+      "name": "character name from script",
+      "role": "main",
+      "scene_appearances": [1, 2, 3],
+      "physical_dna": {{
+        "ethnicity": "specific ethnicity (e.g. Vietnamese, Korean, Black American)",
+        "age_range": "exact range like 25-30",
+        "gender": "woman/man/non-binary",
+        "hair_color": "specific color (e.g. jet black, dark brown with highlights)",
+        "hair_style": "specific style (e.g. shoulder-length straight bob)",
+        "eye_color": "specific color",
+        "skin_tone": "specific tone (e.g. warm medium brown, light olive)",
+        "height_build": "specific (e.g. petite, slender, athletic)",
+        "distinctive_features": "any unique marks, glasses, mole, scar — or 'none'"
+      }},
+      "wardrobe_logic": "One sentence: what this character wears and why it fits their role",
+      "color_palette": {{
+        "primary": "#hexcode",
+        "secondary": "#hexcode",
+        "accent": "#hexcode",
+        "theory_note": "why these colors fit this character"
+      }},
+      "semantic_invariants": ["feature1", "feature2", "feature3", "feature4"],
+      "visual_identity_string": "Complete VIS: [ethnicity] [gender], [age_range], [hair_color] [hair_style] hair, [skin_tone] skin, [distinctive_features if any], [wardrobe summary], [primary_color] dominant palette"
+    }}
+  ]
+}}"""
+
+
+def build_scene_video_prompt(
+    scene_action: str,
+    vis_map: dict,
+    characters_in_scene: list,
+    art_style: str,
+) -> str:
+    """
+    Regional Prompting (Chuẩn 3): dynamically structure prompt based on character count.
+    Prevents Color/Feature Bleeding when multiple characters share a frame.
+
+    vis_map: {"#CHAR_01": vis_string, "#CHAR_02": vis_string}
+    characters_in_scene: ["#CHAR_01"] or ["#CHAR_01", "#CHAR_02"]
+    """
+    vises = [vis_map[c] for c in characters_in_scene if c in vis_map]
+
+    if not vises:
+        return f"{scene_action}. {art_style}"
+
+    if len(vises) == 1:
+        return f"{vises[0]}. Action: {scene_action}. {art_style}"
+
+    if len(vises) == 2:
+        return (
+            f"Wide shot scene. "
+            f"On the left side: {vises[0]}. "
+            f"On the right side: {vises[1]}. "
+            f"Interaction: {scene_action}. {art_style}"
+        )
+
+    return (
+        f"Group shot of three people. "
+        f"Centered: {vises[0]}. "
+        f"To the left: {vises[1]}. "
+        f"To the right: {vises[2]}. "
+        f"Scene: {scene_action}. {art_style}"
+    )
+
+
+# ── Character design prompt (legacy — kept for fallback) ─────────────────
 def character_design_prompt(description: str, style: str, genre: str, variant: int) -> str:
     """Generate ComfyUI/image prompt for character design."""
     style_map = {

@@ -136,14 +136,8 @@ async def _build_resume_value(step: str, approved: bool, project_id: str, action
         }
 
     if step == "character_review":
-        selected_id = ""
-        if approved:
-            # Auto-select variant_index=0 (biến thể đầu tiên)
-            selected_id = await _get_first_character_id(project_id)
-        return {
-            "approved": approved,
-            "selected_character_id": selected_id,
-        }
+        # All characters approved together — no single selection
+        return {"approved": approved}
 
     if step == "scene_review":
         return {"approved": approved}

@@ -117,7 +117,8 @@ async def resume_pipeline(
         { "step": "script", "approved": false, "notes": "Cần thêm kịch tính" }
 
     Body cho character_review:
-        { "step": "character", "approved": true, "selected_character_id": "uuid" }
+        { "step": "character", "approved": true }
+        (approved=false → regenerate all characters)
     """
     await _get_project_or_404(project_id, db)
 
@@ -133,10 +134,8 @@ async def resume_pipeline(
             "notes": body.get("notes", "") if not approved else "",
         }
     elif step == "character":
-        resume_value = {
-            "approved": approved,
-            "selected_character_id": body.get("selected_character_id", ""),
-        }
+        # No selected_character_id — all characters are approved together
+        resume_value = {"approved": approved}
     elif step == "scene":
         resume_value = {
             "approved": approved,

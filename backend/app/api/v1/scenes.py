@@ -11,7 +11,7 @@ from ...models.project import Project, ProjectStatus
 from ...models.script import Script
 from ...services.llm_service import chat_json, LLMError
 from ...services.sse_service import publish_event
-from ...utils.prompt_templates import SCENE_PROMPT_SYSTEM, scene_prompt_user
+from ...utils.prompt_templates import SCENE_PROMPT_SYSTEM, scene_prompt_user, build_scene_video_prompt
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -76,6 +76,7 @@ async def generate_scenes(body: dict, db: AsyncSession = Depends(get_db)):
             video_prompt=s.get("video_prompt", ""),
             duration_seconds=s.get("duration_seconds", 10),
             status=SceneStatus.pending,
+            characters_in_scene=s.get("characters_in_scene") or [],
         )
         db.add(scene)
         scenes_out.append(scene)
@@ -169,7 +170,7 @@ async def regenerate_scene_prompt(scene_id: str, body: dict, db: AsyncSession = 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-async def _generate_scene_prompts(script: Script, project: Project, character_description: str) -> list[dict]:
+async def _generate_scene_prompts(script: Script, project: Project, character_description: str, vis_map: dict | None = None) -> list[dict]:
     """
     Parse existing scenes from script JSON + enrich each with a video_prompt via GPT-4o.
     Falls back to description-based prompts if scene breakdown is not in content_raw.
@@ -203,7 +204,10 @@ Trả về JSON (bắt buộc hoàn chỉnh, không cắt ngang):
         )
         parsed_scenes = fallback_result.get("scenes", [])
 
-    # Enrich each scene with video_prompt via GPT-4o
+    # Art style string for regional prompt builder
+    art_style = f"cinematic lighting, high quality, {project.style or 'cinematic'} style, {project.genre or 'drama'} genre"
+
+    # Enrich each scene with video_prompt via LLM (with VIS + regional prompting)
     enriched = []
     for s in parsed_scenes:
         try:
@@ -215,13 +219,32 @@ Trả về JSON (bắt buộc hoàn chỉnh, không cắt ngang):
                 genre=project.genre or "",
                 style=project.style or "",
                 production_type=str(project.production_type),
+                vis_map=vis_map or None,
             )
-            result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=500)
+            result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=600)
+
+            # Apply regional prompting if vis_map provided
+            characters_in_scene: list = result.get("characters_in_scene", [])
+            base_video_prompt = result.get("video_prompt", "")
+
+            if vis_map and characters_in_scene:
+                # Build regionally-structured prompt (Chuẩn 3)
+                scene_action = s.get("shot_description") or s.get("description", "")
+                final_prompt = build_scene_video_prompt(
+                    scene_action=scene_action,
+                    vis_map=vis_map,
+                    characters_in_scene=characters_in_scene,
+                    art_style=art_style,
+                )
+            else:
+                final_prompt = base_video_prompt
+
             enriched.append({
                 "title": s.get("title", f"Cảnh {len(enriched)+1}"),
                 "description": s.get("shot_description") or s.get("description", ""),
-                "video_prompt": result.get("video_prompt", ""),
+                "video_prompt": final_prompt,
                 "duration_seconds": int(s.get("duration_seconds", 10)),
+                "characters_in_scene": characters_in_scene,
             })
         except Exception as e:
             logger.warning("Scene prompt gen failed for scene %s: %s", s.get("title"), e)
@@ -230,6 +253,7 @@ Trả về JSON (bắt buộc hoàn chỉnh, không cắt ngang):
                 "description": s.get("description", ""),
                 "video_prompt": s.get("shot_description", ""),
                 "duration_seconds": int(s.get("duration_seconds", 10)),
+                "characters_in_scene": [],
             })
 
     return enriched
@@ -247,5 +271,6 @@ def _scene_to_dict(s: Scene) -> dict:
         "status": s.status,
         "clip_r2_key": s.clip_r2_key,
         "thumbnail_r2_key": s.thumbnail_r2_key,
+        "characters_in_scene": s.characters_in_scene or [],
         "created_at": s.created_at.isoformat(),
     }
