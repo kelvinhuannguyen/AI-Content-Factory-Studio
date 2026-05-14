@@ -84,7 +84,8 @@ async def scene_planner_node(state: ProductionState) -> dict:
     except Exception as e:
         logger.error("scene_planner_node error: %s", e)
         await publish_event(project_id, {"type": "agent_error", "agent": "scene_planner", "error": str(e)})
-        return {"error": str(e), "current_stage": "scene_planner"}
+        # Return empty scenes — scene_review will not send email if scenes=[]
+        return {"error": str(e), "scenes": [], "current_stage": "scene_planner"}
 
     await publish_event(project_id, {
         "type": "agent_done",
@@ -103,13 +104,25 @@ async def scene_planner_node(state: ProductionState) -> dict:
 async def scene_review_node(state: ProductionState) -> dict:
     """
     Điểm dừng duyệt cảnh:
+    - Nếu scenes=[] (scene_planner bị lỗi) → tự động retry, không gửi email
     - Gửi email với số cảnh + tổng thời lượng
-    - Duyệt → bắt đầu Celery chord tạo video
+    - Duyệt → bắt đầu tạo video
     - Từ chối → phân cảnh lại
     """
     project_id = state["project_id"]
     scenes = state.get("scenes", [])
     n = len(scenes)
+
+    # Auto-retry if scene_planner failed (no scenes) instead of prompting user
+    if n == 0:
+        logger.warning("scene_review: no scenes available — sending back to scene_planner")
+        await publish_event(project_id, {
+            "type": "agent_start",
+            "agent": "scene_planner",
+            "message": "Phân cảnh gặp lỗi — đang thử lại...",
+        })
+        return {"approval_status": "rejected", "current_stage": "scene_planner"}
+
     total_s = sum(s.get("duration_seconds", 0) for s in scenes)
 
     await publish_event(project_id, {

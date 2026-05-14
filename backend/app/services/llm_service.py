@@ -2,6 +2,7 @@
 import base64
 import json
 import logging
+import re
 from typing import Any
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 import httpx
@@ -61,19 +62,39 @@ async def chat_completion(
     return data["choices"][0]["message"]["content"]
 
 
+def _extract_json_from_llm(raw: str) -> str:
+    """
+    Robustly extract JSON from raw LLM response.
+    Handles: clean JSON, ```json...```, prefix text + code block, partial responses.
+    """
+    # 1. Try markdown code block anywhere in the response
+    match = re.search(r"```(?:json)?\s*\n?([\s\S]*?)\n?```", raw)
+    if match:
+        candidate = match.group(1).strip()
+        if candidate:
+            return candidate
+
+    # 2. Find first { or [ and last matching } or ]
+    for open_ch, close_ch in [('{', '}'), ('[', ']')]:
+        start = raw.find(open_ch)
+        if start != -1:
+            end = raw.rfind(close_ch)
+            if end > start:
+                return raw[start:end + 1]
+
+    return raw.strip()
+
+
 async def chat_json(
     system_prompt: str,
     user_prompt: str,
     **kwargs,
 ) -> Any:
-    """Call chat_completion and parse JSON response."""
+    """Call chat_completion and parse JSON response. Handles markdown-wrapped output."""
     raw = await chat_completion(
         system_prompt, user_prompt, response_format="json_object", **kwargs
     )
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.split("\n")
-        cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    cleaned = _extract_json_from_llm(raw)
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:
@@ -160,10 +181,7 @@ async def _chat_vision_request(
         raise LLMError(f"KymaAPI vision {model} returned {resp.status_code}: {resp.text[:200]}")
 
     raw = resp.json()["choices"][0]["message"]["content"]
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        lines = cleaned.split("\n")
-        cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+    cleaned = _extract_json_from_llm(raw)
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError as e:

@@ -191,14 +191,15 @@ async def _generate_scene_prompts(script: Script, project: Project, character_de
         from ...services.llm_service import chat_json as _chat_json
         fallback_result = await _chat_json(
             "Bạn là biên kịch phân tích kịch bản thành các cảnh quay. Trả về JSON.",
-            f"""Phân tích kịch bản sau thành 4-8 cảnh quay, mỗi cảnh có tiêu đề, mô tả, thời lượng (giây):
+            f"""Phân tích kịch bản sau thành 4-6 cảnh quay ngắn gọn, mỗi cảnh có tiêu đề, mô tả, thời lượng (giây).
+Giữ mô tả ngắn (dưới 30 từ mỗi cảnh).
 
-{(script.content_raw or "")[:3000]}
+{(script.content_raw or "")[:2000]}
 
-Trả về JSON:
+Trả về JSON (bắt buộc hoàn chỉnh, không cắt ngang):
 {{"scenes": [{{"scene_number":1,"title":"...","description":"...","duration_seconds":10}}]}}""",
-            temperature=0.6,
-            max_tokens=2000,
+            temperature=0.4,
+            max_tokens=4096,
         )
         parsed_scenes = fallback_result.get("scenes", [])
 
