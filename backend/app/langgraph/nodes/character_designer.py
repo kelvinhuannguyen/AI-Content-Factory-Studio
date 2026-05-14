@@ -134,8 +134,13 @@ async def character_review_node(state: ProductionState) -> dict:
         "selected_character_id": selected_id if approved else None,
         "character_approved": approved,
         "approval_status": "approved" if approved else "rejected",
-        "current_stage": "done" if approved else "character_designer",
+        "current_stage": "scene_planner" if approved else "character_designer",
     }
+
+
+def route_after_character_review(state: ProductionState) -> str:
+    """approved → scene_planner; rejected → character_designer (regenerate)."""
+    return "scene_planner" if state.get("character_approved") else "character_designer"
 
 
 async def _wait_for_characters(project_id: str) -> list[dict]:

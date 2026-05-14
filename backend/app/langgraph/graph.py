@@ -24,6 +24,7 @@ from .nodes.script_scorer import (
 from .nodes.character_designer import (
     character_designer_node,
     character_review_node,
+    route_after_character_review,
 )
 from .nodes.scene_planner import (
     scene_planner_node,
@@ -76,7 +77,11 @@ def _build_graph():
 
     # ── Character flow ────────────────────────────────────────────────────
     builder.add_edge("character_designer", "character_review")
-    builder.add_edge("character_review",   "scene_planner")
+    builder.add_conditional_edges(
+        "character_review",
+        route_after_character_review,
+        {"scene_planner": "scene_planner", "character_designer": "character_designer"},
+    )
 
     # ── Scene flow ────────────────────────────────────────────────────────
     builder.add_edge("scene_planner", "scene_review")
