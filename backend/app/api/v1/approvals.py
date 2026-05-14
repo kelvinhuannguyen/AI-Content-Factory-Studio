@@ -9,7 +9,7 @@ Mỗi bước có resume payload riêng:
 """
 import logging
 import uuid
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Query
 from fastapi.responses import HTMLResponse
 
 from ...services.notification_service import resolve_token
@@ -18,23 +18,55 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-@router.post("/{token}")
-async def process_approval(
+async def _do_resume(project_id: str, step: str, action: str, approved: bool) -> None:
+    """Run LangGraph resume in background — avoids browser timeout on slow nodes."""
+    resume_value = await _build_resume_value(step, approved, project_id, action)
+    try:
+        from ...langgraph.graph import get_graph
+        from ...langgraph.checkpointer import get_thread_config
+        from langgraph.types import Command
+        graph  = await get_graph()
+        config = get_thread_config(project_id)
+        state  = await graph.aget_state(config)
+        if state and state.next:
+            await graph.ainvoke(Command(resume=resume_value), config=config)
+            logger.info("LangGraph resumed: project=%s step=%s action=%s", project_id, step, action)
+        else:
+            logger.info("LangGraph not paused for project %s — skipping resume", project_id)
+    except Exception as e:
+        logger.warning("LangGraph resume error (non-fatal): %s", e)
+
+
+def _action_html(action: str, step: str) -> HTMLResponse:
+    responses = {
+        "proceed": ("Đã duyệt — Tiếp tục",   "✅", "#16a34a", "Pipeline tiếp tục tự động. Bạn có thể đóng trang này."),
+        "remake":  ("Yêu cầu làm lại",         "🔄", "#d97706", "Hệ thống sẽ tạo lại video. Bạn có thể đóng trang này."),
+        "hold":    ("Đã tạm dừng",             "⏸", "#52525b", "Project ở trạng thái hold. Vào dashboard để tiếp tục."),
+        "approve": ("Đã duyệt thành công",     "✅", "#16a34a", f"<strong>{_step_label(step)}</strong> đã được duyệt.<br>Pipeline tự động tiếp tục."),
+        "reject":  ("Đã từ chối",              "❌", "#dc2626", f"<strong>{_step_label(step)}</strong> bị từ chối.<br>Hệ thống sẽ tạo lại."),
+    }
+    title, emoji, color, body = responses.get(action, ("Hoàn thành", "✅", "#16a34a", ""))
+    return HTMLResponse(content=_html_page(title, emoji, body, color))
+
+
+@router.get("/{token}")
+async def process_approval_via_link(
     token: str,
+    background_tasks: BackgroundTasks,
     action: str = Query(..., pattern="^(approve|reject|proceed|remake|hold)$"),
 ):
     """
-    Được gọi từ nút trong email hoặc Telegram inline button.
-    Token single-use, hết hạn 48h.
-    Resume LangGraph với payload phù hợp từng bước.
+    Endpoint được gọi khi user click link trong email (GET request).
+    Token single-use, hết hạn 48h. LangGraph resume chạy trong background.
     """
     payload = await resolve_token(token)
     if not payload:
         return HTMLResponse(
             status_code=404,
             content=_html_page(
-                "Token không hợp lệ", "❌",
-                "Link này đã được dùng hoặc đã hết hạn (48 giờ).",
+                "Link đã hết hạn", "❌",
+                "Link này đã được dùng hoặc đã hết hạn (48 giờ).<br>"
+                "Vào dashboard để thực hiện thủ công.",
                 "#dc2626",
             ),
         )
@@ -43,58 +75,42 @@ async def process_approval(
     step       = payload["step"]
     approved   = action in ("approve", "proceed")
 
-    logger.info("Approval: project=%s step=%s action=%s", project_id, step, action)
+    logger.info("Email approval: project=%s step=%s action=%s", project_id, step, action)
 
-    # Build resume value tuỳ theo bước
-    resume_value = await _build_resume_value(step, approved, project_id)
+    # Resume chạy background — tránh browser timeout khi node mất nhiều phút
+    background_tasks.add_task(_do_resume, project_id, step, action, approved)
 
-    # Resume LangGraph nếu graph đang pause
-    try:
-        from ...langgraph.graph import get_graph
-        from ...langgraph.checkpointer import get_thread_config
-        from langgraph.types import Command
-
-        graph  = await get_graph()
-        config = get_thread_config(project_id)
-        state  = await graph.aget_state(config)
-
-        if state and state.next:
-            await graph.ainvoke(Command(resume=resume_value), config=config)
-            logger.info("LangGraph resumed: project=%s step=%s approved=%s", project_id, step, approved)
-        else:
-            logger.info("LangGraph not paused for project %s — skipping resume", project_id)
-    except Exception as e:
-        logger.warning("LangGraph resume error (non-fatal): %s", e)
-
-    # HTML response — hiển thị trong browser khi click link
-    _action_responses = {
-        "proceed": ("Đã duyệt — Tiếp tục", "✅", "#16a34a", "Pipeline tiếp tục tự động sang bước SEO."),
-        "remake":  ("Làm lại video", "🔄", "#d97706", "Hệ thống sẽ tạo lại video với chất lượng cao hơn."),
-        "hold":    ("Tạm dừng", "⏸", "#64748b", "Project đang ở trạng thái hold. Bạn có thể tiếp tục sau."),
-        "approve": ("Đã duyệt thành công", "✅", "#16a34a", f"Bước <strong>{_step_label(step)}</strong> đã được duyệt."),
-        "reject":  ("Đã từ chối", "❌", "#dc2626", f"Bước <strong>{_step_label(step)}</strong> bị từ chối."),
-    }
-    title, emoji, color, body = _action_responses.get(action, ("Hoàn thành", "✅", "#16a34a", ""))
-    return HTMLResponse(content=_html_page(title, emoji, body, color))
+    return _action_html(action, step)
 
 
-@router.get("/{token}")
-async def get_approval_status(token: str):
-    """Kiểm tra token có còn hợp lệ không (không consume)."""
-    from ...redis_client import get_redis
-    import json
-    redis = await get_redis()
-    raw = await redis.get(f"approval:{token}")
-    if not raw:
-        raise HTTPException(404, "Token không hợp lệ hoặc đã hết hạn")
-    data = json.loads(raw)
-    ttl  = await redis.ttl(f"approval:{token}")
-    return {**data, "ttl_seconds": ttl}
+@router.post("/{token}")
+async def process_approval_api(
+    token: str,
+    background_tasks: BackgroundTasks,
+    action: str = Query(..., pattern="^(approve|reject|proceed|remake|hold)$"),
+):
+    """Programmatic approval (frontend wizard, Telegram). Same logic as GET."""
+    payload = await resolve_token(token)
+    if not payload:
+        return HTMLResponse(
+            status_code=404,
+            content=_html_page("Token không hợp lệ", "❌",
+                "Link này đã được dùng hoặc đã hết hạn (48 giờ).", "#dc2626"),
+        )
+
+    project_id = payload["project_id"]
+    step       = payload["step"]
+    approved   = action in ("approve", "proceed")
+
+    logger.info("API approval: project=%s step=%s action=%s", project_id, step, action)
+    background_tasks.add_task(_do_resume, project_id, step, action, approved)
+
+    return _action_html(action, step)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _build_resume_value(step: str, approved: bool, project_id: str) -> dict:
+async def _build_resume_value(step: str, approved: bool, project_id: str, action: str = "approve") -> dict:
     """
     Trả về resume dict phù hợp với từng interrupt node.
 

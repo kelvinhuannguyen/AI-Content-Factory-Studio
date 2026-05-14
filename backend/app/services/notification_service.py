@@ -219,11 +219,42 @@ def _info_row(label: str, value: str, extra: str = "") -> str:
 </table>"""
 
 
+def _script_preview_block(script_content: str) -> str:
+    if not script_content.strip():
+        return ""
+    # Cap at ~2000 chars to keep email readable
+    preview = script_content[:2000]
+    if len(script_content) > 2000:
+        preview += "\n\n[... xem toàn bộ kịch bản trên dashboard ...]"
+    # Escape HTML special chars
+    preview = preview.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    preview = preview.replace("\n", "<br>")
+    return f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="border:1px solid {_BORDER};border-radius:6px;margin-bottom:24px;">
+  <tr>
+    <td style="padding:6px 16px;background:#f4f4f5;border-radius:6px 6px 0 0;
+      border-bottom:1px solid {_BORDER};">
+      <p style="margin:0;{_FONT};font-size:11px;font-weight:600;color:{_MUTED};
+        text-transform:uppercase;letter-spacing:0.06em;">Nội dung kịch bản</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:16px;max-height:400px;overflow:hidden;">
+      <p style="margin:0;{_FONT};font-size:13px;color:{_TEXT};line-height:1.7;
+        white-space:pre-wrap;">{preview}</p>
+    </td>
+  </tr>
+</table>"""
+
+
 def _build_email_html(
     step_label: str, project_title: str, extra_info: str,
     approve_url: str, reject_url: str,
+    script_content: str = "",
 ) -> str:
     info = _info_row("Dự án", project_title, extra_info)
+    script_block = _script_preview_block(script_content)
     buttons = f"""
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
   style="margin-bottom:28px;">
@@ -249,7 +280,7 @@ def _build_email_html(
         preheader=f"Yêu cầu duyệt: {step_label} — {project_title}",
         headline=step_label,
         subhead="Vui lòng xem xét và chọn hành động bên dưới.",
-        body_rows=info + buttons,
+        body_rows=info + script_block + buttons,
         footer_lines=footer,
     )
 
@@ -327,6 +358,7 @@ async def send_approval_request(
     project_title: str,
     step: str,
     extra_info: str = "",
+    script_content: str = "",
 ) -> str:
     """
     Create approval token + send email via Resend.
@@ -345,7 +377,7 @@ async def send_approval_request(
     logger.info("-" * 60)
 
     subject   = f"[AI Content Factory] {step_label} — {project_title}"
-    html_body = _build_email_html(step_label, project_title, extra_info, approve_url, reject_url)
+    html_body = _build_email_html(step_label, project_title, extra_info, approve_url, reject_url, script_content)
     to        = settings.notification_email
 
     sent = await send_email_resend(to, subject, html_body)

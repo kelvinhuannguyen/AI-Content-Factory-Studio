@@ -168,15 +168,18 @@ async def script_review_node(state: ProductionState) -> dict:
         "message": "Kịch bản đã sẵn sàng. Đã gửi email duyệt.",
     })
 
-    # Gửi email approval
+    # Gửi email approval (đính kèm kịch bản + điểm AI)
     project_title = await _fetch_project_title(project_id)
-    extra = f"Chủ đề: {topic} | {word_count} từ" if topic else f"{word_count} từ"
+    ai_score = state.get("script_ai_score")
+    score_note = f" · AI Score: {ai_score}/10" if ai_score else ""
+    extra = f"Chủ đề: {topic} | {word_count} từ{score_note}" if topic else f"{word_count} từ{score_note}"
     try:
         await send_approval_request(
             project_id=project_id,
             project_title=project_title,
             step="script_review",
             extra_info=extra,
+            script_content=script_content,
         )
     except Exception as e:
         logger.warning("Email notification failed (script_review): %s", e)
