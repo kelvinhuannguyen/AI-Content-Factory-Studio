@@ -569,3 +569,80 @@ Instructions:
 6. Compute motion_intensity_avg as arithmetic mean of all motion_intensity values, rounded to 1 decimal.
 
 Return ONLY the JSON object. No preamble, no explanation."""
+
+
+# ── SEO A/B Agent ─────────────────────────────────────────────────────────────
+SEO_AB_SYSTEM = """You are a YouTube Growth Expert & Viral Content Strategist.
+Given a video project (script summary, genre, topic, characters), generate TWO distinct SEO packages for A/B testing.
+
+Package A = SEO-optimized (keyword-first, searchable, long-tail)
+Package B = Viral/Clickbait (curiosity gap, emotion hook, trending phrasing)
+
+Each package must contain:
+- title_seo: Keyword-first title, ≤70 chars (starts with main keyword)
+- title_clickbait: Emotion/curiosity hook title, ≤70 chars
+- title_story: Narrative/storytelling title, ≤70 chars
+- description: 4-section structure:
+    Line 1-2: HOOK (strong emotion/curiosity opener)
+    Section 2: Summary (2-3 sentences what the video is about)
+    Section 3: Timestamps (00:00 Intro, estimate timestamps from scene structure)
+    Section 4: CTA + 10 relevant hashtags
+- tags: List of exactly 20 tags (broad → narrow, mix Vietnamese + English)
+- thumbnail_prompt: One sentence describing a 16:9 still image — focus on character closeup with Ref ID if available, dramatic lighting, space for text overlay. NO text in the image itself.
+- filename: SEO-friendly filename in Vietnamese without diacritics, kebab-case, no special chars (e.g., "bi-mat-nhan-vat-ai-concept.mp4")
+
+Output ONLY valid JSON, exactly this structure:
+{
+  "package_a": {
+    "title_seo": "...",
+    "title_clickbait": "...",
+    "title_story": "...",
+    "description": "...",
+    "tags": ["tag1", "tag2", ...],
+    "thumbnail_prompt": "...",
+    "filename": "..."
+  },
+  "package_b": {
+    "title_seo": "...",
+    "title_clickbait": "...",
+    "title_story": "...",
+    "description": "...",
+    "tags": ["tag1", "tag2", ...],
+    "thumbnail_prompt": "...",
+    "filename": "..."
+  }
+}
+No markdown, no explanation outside JSON."""
+
+
+def seo_ab_user(
+    topic: str,
+    genre: str,
+    style: str,
+    script_summary: str,
+    language: str,
+    character_names: list[str],
+    total_duration_s: int,
+) -> str:
+    """Build user prompt for SEO A/B agent."""
+    lang_label = "Tiếng Việt" if language == "vi" else "English"
+    char_block = ", ".join(character_names) if character_names else "(no named characters)"
+    return f"""Generate 2 SEO packages (A/B) for this video:
+
+TOPIC: {topic}
+GENRE: {genre} | STYLE: {style}
+LANGUAGE: {lang_label}
+DURATION: ~{total_duration_s}s
+CHARACTERS: {char_block}
+
+SCRIPT SUMMARY (first 500 chars):
+{script_summary[:500]}
+
+Requirements:
+- All titles, descriptions, and tags in {lang_label}
+- Tags: mix broad (genre keywords) → specific (topic keywords)
+- thumbnail_prompt: use character Ref ID if available (e.g., "#CHAR_01 closeup")
+- filename: no diacritics, kebab-case, no spaces, end with .mp4
+- description timestamps should estimate based on ~{total_duration_s // 3}s scenes
+
+Return ONLY the JSON object."""

@@ -33,10 +33,18 @@ export default function StepSEO({ onNext, onBack }: StepProps) {
   const [thumbLoading, setThumbLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [approved, setApproved] = useState(false);
+  const [pausedAt, setPausedAt] = useState<string | null>(null);
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
 
-  // Load existing SEO on mount
+  // Load existing SEO + pipeline state on mount
   useEffect(() => {
     if (!projectId) return;
+    // Check pipeline state for seo_review interrupt
+    fetch(`${BASE}/pipeline/${projectId}/state`)
+      .then(r => r.ok ? r.json() : null)
+      .then(state => { if (state?.paused_at) setPausedAt(state.paused_at); })
+      .catch(() => {});
+    // Load SEO data
     fetch(`${BASE}/seo/${projectId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -46,6 +54,38 @@ export default function StepSEO({ onNext, onBack }: StepProps) {
       })
       .catch(() => {});
   }, [projectId]);
+
+  async function handleSeoApprove(pkg: "a" | "b") {
+    if (!projectId) return;
+    setReviewSubmitting(true);
+    try {
+      await fetch(`${BASE}/pipeline/${projectId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "seo_review", approved: true, selected_package: pkg }),
+      });
+      setPausedAt(null);
+      onNext();
+    } catch { /* silent */ } finally {
+      setReviewSubmitting(false);
+    }
+  }
+
+  async function handleSeoRedo() {
+    if (!projectId) return;
+    setReviewSubmitting(true);
+    try {
+      await fetch(`${BASE}/pipeline/${projectId}/resume`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ step: "seo_review", approved: false }),
+      });
+      setSeo(null);
+      setPausedAt("seo_agent");
+    } catch { /* silent */ } finally {
+      setReviewSubmitting(false);
+    }
+  }
 
   function hydrate(data: SeoData) {
     setSeo(data);
@@ -118,8 +158,56 @@ export default function StepSEO({ onNext, onBack }: StepProps) {
   const canProceed = approved && seo !== null;
   const charCount = description.length;
 
+  // A/B package split: first 3 titles = pkg A, last 3 = pkg B
+  const titlesA = seo ? seo.title_variants.slice(0, 3) : [];
+  const titlesB = seo ? seo.title_variants.slice(3, 6) : [];
+
   return (
     <div className="mx-auto max-w-2xl space-y-5">
+      {/* SEO Review interrupt panel */}
+      {pausedAt === "seo_review" && seo && (
+        <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4 space-y-3">
+          <p className="text-sm font-semibold text-primary">Duyệt Gói SEO A/B — chọn gói để tiếp tục</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-lg border border-green-500/40 bg-green-500/5 p-3 space-y-1">
+              <p className="text-xs font-semibold text-green-700 dark:text-green-400">Gói A — SEO</p>
+              {titlesA.map((t, i) => (
+                <p key={i} className="text-xs text-foreground/80 line-clamp-1">• {t}</p>
+              ))}
+            </div>
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-3 space-y-1">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400">Gói B — Viral</p>
+              {titlesB.map((t, i) => (
+                <p key={i} className="text-xs text-foreground/80 line-clamp-1">• {t}</p>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleSeoApprove("a")}
+              disabled={reviewSubmitting}
+              className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-40 transition-colors"
+            >
+              {reviewSubmitting ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : "✅ Chọn Gói A"}
+            </button>
+            <button
+              onClick={() => handleSeoApprove("b")}
+              disabled={reviewSubmitting}
+              className="flex-1 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-40 transition-colors"
+            >
+              {reviewSubmitting ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : "🔶 Chọn Gói B"}
+            </button>
+            <button
+              onClick={handleSeoRedo}
+              disabled={reviewSubmitting}
+              className="rounded-lg border border-destructive px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40 transition-colors"
+            >
+              Viết lại
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between">
         <div>
           <h2 className="text-xl font-bold">Gói SEO YouTube</h2>

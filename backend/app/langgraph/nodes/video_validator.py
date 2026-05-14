@@ -76,12 +76,84 @@ async def video_validator_node(state: ProductionState) -> dict:
         ),
     })
 
+    # Run technical FFprobe audit (non-fatal)
+    tech_audit: dict = {}
+    if final_video_key:
+        try:
+            from ...services.r2_service import download_bytes
+            video_bytes = await download_bytes(final_video_key)
+            tech_audit = await _technical_audit(video_bytes)
+        except Exception as e:
+            logger.warning("Technical audit failed (non-fatal): %s", e)
+            tech_audit = {"error": str(e)}
+
     logger.info("Video score: %d/100 (%d/10), retry=%d, will_retry=%s", overall_score, ai_score, retry_count, will_retry)
     return {
         "video_ai_score": ai_score,
+        "video_tech_audit": tech_audit or None,
         "current_stage": "video_validator",
         "error": None,
     }
+
+
+async def _technical_audit(video_bytes: bytes) -> dict:
+    """Run FFprobe on video bytes to extract technical metadata. Non-fatal."""
+    import asyncio
+    import json
+    import os
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        in_p = Path(tmp) / "check.mp4"
+        in_p.write_bytes(video_bytes)
+
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "quiet", "-print_format", "json",
+            "-show_streams", "-show_format", str(in_p),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        out, _ = await proc.communicate()
+        if proc.returncode != 0:
+            return {"error": "ffprobe unavailable"}
+
+        info = json.loads(out.decode())
+        streams = info.get("streams", [])
+        fmt = info.get("format", {})
+
+        video_s = next((s for s in streams if s.get("codec_type") == "video"), {})
+        audio_s = next((s for s in streams if s.get("codec_type") == "audio"), {})
+
+        fps_str = video_s.get("r_frame_rate", "0/1")
+        try:
+            num, den = (int(x) for x in fps_str.split("/"))
+            fps = round(num / den, 2) if den else 0.0
+        except Exception:
+            fps = 0.0
+
+        width       = int(video_s.get("width", 0))
+        height      = int(video_s.get("height", 0))
+        bitrate_kbps = int(fmt.get("bit_rate", 0)) // 1000
+        codec       = video_s.get("codec_name", "unknown")
+        audio_codec = audio_s.get("codec_name", "unknown")
+        duration_s  = float(fmt.get("duration", 0))
+
+        return {
+            "codec":         codec,
+            "width":         width,
+            "height":        height,
+            "fps":           fps,
+            "bitrate_kbps":  bitrate_kbps,
+            "audio_codec":   audio_codec,
+            "duration_s":    round(duration_s, 1),
+            "codec_ok":      codec in ("h264", "h265", "vp9", "av1"),
+            "resolution_ok": height >= 720,
+            "fps_ok":        fps in (23.98, 24.0, 25.0, 29.97, 30.0, 50.0, 60.0),
+            "bitrate_ok":    bitrate_kbps >= 1500,
+            "audio_ok":      audio_codec in ("aac", "mp3", "opus"),
+            "duration_ok":   duration_s >= 10,
+        }
 
 
 async def _save_quality_score(project_id: uuid.UUID, scores: dict, overall: int) -> None:

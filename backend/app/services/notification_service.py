@@ -432,6 +432,110 @@ async def send_video_review_request(
     )
 
 
+def _build_seo_review_html(
+    project_title: str,
+    seo_package: dict,
+    approve_a_url: str,
+    approve_b_url: str,
+    redo_url: str,
+) -> str:
+    """SEO A/B review email — shows 2 packages, 3 action buttons."""
+    pkg_a = seo_package.get("package_a", {})
+    pkg_b = seo_package.get("package_b", {})
+
+    def _pkg_block(pkg: dict, label: str, color: str) -> str:
+        title = pkg.get("title_seo") or pkg.get("title_clickbait") or "(no title)"
+        desc_preview = (pkg.get("description") or "")[:180].replace("<", "&lt;").replace(">", "&gt;")
+        tags_preview = ", ".join((pkg.get("tags") or [])[:8])
+        return f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="border:2px solid {color};border-radius:8px;margin-bottom:16px;">
+  <tr>
+    <td style="padding:10px 14px;background:{color}20;border-radius:6px 6px 0 0;">
+      <p style="margin:0;{_FONT};font-size:11px;font-weight:700;color:{color};
+        text-transform:uppercase;letter-spacing:0.06em;">{label}</p>
+    </td>
+  </tr>
+  <tr>
+    <td style="padding:12px 14px;">
+      <p style="margin:0 0 6px;{_FONT};font-size:15px;font-weight:700;color:{_TEXT};">{title}</p>
+      <p style="margin:0 0 6px;{_FONT};font-size:12px;color:{_MUTED};line-height:1.5;">{desc_preview}...</p>
+      <p style="margin:0;{_FONT};font-size:11px;color:{_MUTED};">Tags: {tags_preview}</p>
+    </td>
+  </tr>
+</table>"""
+
+    info = _info_row("Dự án", project_title)
+    pkg_blocks = _pkg_block(pkg_a, "Gói A — SEO Tối ưu", "#16a34a") + _pkg_block(pkg_b, "Gói B — Viral/Clickbait", "#d97706")
+    buttons = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+  style="margin-bottom:28px;">
+  <tr>
+    <td width="32%" align="center" style="padding:0 3px 0 0;">
+      {_vml_btn(approve_a_url, "Chon A", "#16a34a", 160)}
+    </td>
+    <td width="32%" align="center" style="padding:0 2px;">
+      {_vml_btn(approve_b_url, "Chon B", "#d97706", 160)}
+    </td>
+    <td width="32%" align="center" style="padding:0 0 0 3px;">
+      {_vml_btn(redo_url, "Viet lai", "#dc2626", 160)}
+    </td>
+  </tr>
+</table>"""
+    footer = (
+        f'Link hết hạn sau <strong>48 giờ</strong> &middot; Mỗi link chỉ dùng được 1 lần.<br>'
+        f'<a href="{approve_a_url}" style="color:#16a34a;">Chọn Gói A</a> &nbsp;|&nbsp; '
+        f'<a href="{approve_b_url}" style="color:#d97706;">Chọn Gói B</a> &nbsp;|&nbsp; '
+        f'<a href="{redo_url}" style="color:#dc2626;">Viết lại</a>'
+    )
+    return _base_template(
+        preheader=f"Gói SEO A/B đã sẵn sàng — chọn gói phù hợp",
+        headline="Duyệt Gói SEO A/B",
+        subhead="Hệ thống đã tạo 2 gói SEO khác nhau. Chọn gói bạn muốn sử dụng.",
+        body_rows=info + pkg_blocks + buttons,
+        footer_lines=footer,
+    )
+
+
+async def send_seo_review_request(
+    project_id: str,
+    project_title: str,
+    seo_package: dict,
+) -> None:
+    """Send SEO A/B review email: [Chọn A] / [Chọn B] / [Viết lại]."""
+    token_a    = await create_approval_token(project_id, "seo_review")
+    token_b    = await create_approval_token(project_id, "seo_review")
+    token_redo = await create_approval_token(project_id, "seo_review")
+
+    approve_a_url = f"{_approval_url(token_a, 'approve')}&package=a"
+    approve_b_url = f"{_approval_url(token_b, 'approve')}&package=b"
+    redo_url      = _approval_url(token_redo, "reject")
+
+    logger.info("-" * 60)
+    logger.info("SEO REVIEW: project=%s", project_id)
+    logger.info("APPROVE A: %s", approve_a_url)
+    logger.info("APPROVE B: %s", approve_b_url)
+    logger.info("REDO:      %s", redo_url)
+    logger.info("-" * 60)
+
+    subject   = f"[AI Content Factory] Duyệt Gói SEO — {project_title}"
+    html_body = _build_seo_review_html(project_title, seo_package, approve_a_url, approve_b_url, redo_url)
+    to        = settings.notification_email
+
+    sent = await send_email_resend(to, subject, html_body)
+    if not sent:
+        logger.warning("Resend not configured — SEO review URLs logged above.")
+
+    await _send_telegram(
+        f"📊 <b>Duyệt SEO A/B</b>\nDự án: <b>{project_title}</b>",
+        [
+            {"text": "✅ Chọn A", "url": approve_a_url},
+            {"text": "🔶 Chọn B", "url": approve_b_url},
+            {"text": "✏️ Viết lại", "url": redo_url},
+        ],
+    )
+
+
 async def send_simple_notification(subject: str, body: str) -> None:
     """Send a plain notification email (no approval buttons)."""
     to = settings.notification_email

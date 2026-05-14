@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Sparkles, ArrowLeft, ArrowRight, Loader2, RefreshCw, Check } from "lucide-react";
+import { Sparkles, ArrowLeft, ArrowRight, Loader2, RefreshCw, Check, Film } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useSSE } from "@/hooks/useSSE";
 import { useWizardStore } from "@/stores/wizardStore";
 import type { StepProps } from "./types";
@@ -30,10 +31,30 @@ export default function StepSceneBreakdown({ onNext, onBack }: StepProps) {
   const { project } = useWizardStore();
   const projectId = project?.id;
 
+  interface ShotItem {
+    id: string;
+    shot_id: string;
+    duration: number;
+    prompt: string;
+    qc_score: number | null;
+    motion_intensity: number | null;
+  }
+
   const [phase, setPhase] = useState<Phase>("waiting");
   const [scenes, setScenes] = useState<SceneItem[]>([]);
+  const [shots, setShots] = useState<ShotItem[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
   const syncedRef = useRef(false);
+
+  async function loadShots() {
+    if (!projectId) return;
+    try {
+      const res = await fetch(`${BASE}/shots/${projectId}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) setShots(data);
+    } catch { /* silent */ }
+  }
 
   async function loadScenes() {
     if (!projectId) return;
@@ -62,10 +83,16 @@ export default function StepSceneBreakdown({ onNext, onBack }: StepProps) {
       } else if (
         state.current_stage === "video_editor" ||
         state.current_stage === "video_validator" ||
+        state.current_stage === "final_assembler" ||
+        state.current_stage === "cinematic_decomposer" ||
+        state.current_stage === "continuity_director" ||
+        state.current_stage === "seo_agent" ||
         state.paused_at === "video_review" ||
+        state.paused_at === "seo_review" ||
         state.status === "completed"
       ) {
         await loadScenes();
+        await loadShots();
         setPhase("already_done");
       } else if (state.current_stage === "scene_planner") {
         setPhase("planning");
@@ -98,6 +125,10 @@ export default function StepSceneBreakdown({ onNext, onBack }: StepProps) {
     if (type === "agent_interrupt" && step === "scene_review") {
       loadScenes();
       setPhase("ready");
+    }
+
+    if (type === "agent_done" && agent === "cinematic_decomposer") {
+      loadShots();
     }
 
     if (type === "agent_error" && agent === "scene_planner") {
@@ -258,6 +289,43 @@ export default function StepSceneBreakdown({ onNext, onBack }: StepProps) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Shot breakdown (Cinematic Decomposer output) */}
+      {shots.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Film className="h-4 w-4 text-primary" />
+            <span>Cinematic Decomposer — {shots.length} shots ≤8s</span>
+          </div>
+          {(() => {
+            const grouped = shots.reduce<Record<string, ShotItem[]>>((acc, s) => {
+              const prefix = (s.shot_id || "").split("_")[0] || "SC";
+              if (!acc[prefix]) acc[prefix] = [];
+              acc[prefix].push(s);
+              return acc;
+            }, {});
+            return Object.entries(grouped).map(([prefix, grpShots]) => (
+              <div key={prefix} className="rounded-lg border border-border overflow-hidden">
+                <div className="px-3 py-1.5 bg-muted/50 text-xs font-mono text-muted-foreground font-semibold">
+                  {prefix} — {grpShots.length} shot{grpShots.length > 1 ? "s" : ""}
+                </div>
+                {grpShots.map((shot) => (
+                  <div key={shot.id} className="px-3 py-2 border-t border-border flex items-start gap-3 text-xs">
+                    <span className="font-mono text-muted-foreground w-20 shrink-0">{shot.shot_id}</span>
+                    <span className="text-muted-foreground w-8 shrink-0">{shot.duration}s</span>
+                    <span className="flex-1 line-clamp-2 text-foreground/80">{shot.prompt}</span>
+                    {shot.qc_score !== null && (
+                      <span className={cn("shrink-0 font-medium", shot.qc_score >= 8 ? "text-green-600" : "text-amber-600")}>
+                        {shot.qc_score.toFixed(1)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ));
+          })()}
         </div>
       )}
 

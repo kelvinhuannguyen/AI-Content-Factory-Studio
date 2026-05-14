@@ -42,6 +42,9 @@ class ProductionState(TypedDict):
     bgm_r2_key: Optional[str]        # background music MP3 in R2
     continuity_manifest: Optional[dict]  # Master Render List from continuity_director
     blueprint_r2_key: Optional[str]     # R2 path to blueprint.json from final_assembler
+    video_tech_audit: Optional[dict]   # FFprobe technical check results from video_validator
+    seo_package: Optional[dict]        # A/B SEO packages from seo_agent
+    seo_retry_count: int               # auto-increments on seo_agent retry
 
     # ── AI Scoring + Auto-Retry ───────────────────────────────────────────
     script_ai_score: Optional[int]   # 1-10, from script_scorer_node
@@ -106,6 +109,9 @@ def initial_state(
         bgm_r2_key=None,
         continuity_manifest=None,
         blueprint_r2_key=None,
+        video_tech_audit=None,
+        seo_package=None,
+        seo_retry_count=0,
         # AI Scoring + Auto-Retry
         script_ai_score=None,
         script_retry_count=0,

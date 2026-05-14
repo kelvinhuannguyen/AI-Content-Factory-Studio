@@ -1,13 +1,14 @@
-"""LangGraph StateGraph — 15 nodes, 5 interrupt points.
+"""LangGraph StateGraph — 17 nodes, 5 interrupt points.
 
 Graph flow:
-  screenwriter → script_scorer → script_review(INTERRUPT) → character_designer
+  screenwriter → script_scorer → script_review(INTERRUPT 1) → character_designer
     ↑ retry < 8/10                ↑ human reject loops back
-  → character_scorer → character_review(INTERRUPT) → scene_planner → scene_review(INTERRUPT)
+  → character_scorer → character_review(INTERRUPT 2) → scene_planner → scene_review(INTERRUPT 3)
      ↑ AI retry < 8/10   ↑ human reject loops back to character_designer
   → cinematic_decomposer → continuity_director → video_editor
-  → final_assembler → video_validator → video_review(INTERRUPT) → END
-     ↑ AI retry < 8/10                  ↑ remake loops back to video_editor
+  → final_assembler → video_validator → video_review(INTERRUPT 4)
+  → seo_agent → seo_review(INTERRUPT 5) → END
+     ↑ reject/retry loops back (max 3)
 """
 from __future__ import annotations
 import logging
@@ -40,6 +41,7 @@ from .nodes.scene_planner import (
 from .nodes.cinematic_decomposer import cinematic_decomposer_node
 from .nodes.continuity_director import continuity_director_node
 from .nodes.final_assembler import final_assembler_node
+from .nodes.seo_agent import seo_agent_node, seo_review_node, route_after_seo_review
 from .nodes.video_editor import video_editor_node
 from .nodes.video_validator import (
     video_validator_node,
@@ -70,6 +72,8 @@ def _build_graph():
     builder.add_node("video_editor",            video_editor_node)
     builder.add_node("final_assembler",         final_assembler_node)
     builder.add_node("video_validator",    video_validator_node)
+    builder.add_node("seo_agent",          seo_agent_node)
+    builder.add_node("seo_review",         seo_review_node)
     builder.add_node("video_review",       video_review_node)
 
     # ── Entry point ───────────────────────────────────────────────────────
@@ -123,7 +127,13 @@ def _build_graph():
     builder.add_conditional_edges(
         "video_review",
         route_after_video_review,
-        {"end": END, "video_editor": "video_editor"},
+        {"end": "seo_agent", "video_editor": "video_editor"},  # remap end → seo_agent
+    )
+    builder.add_edge("seo_agent", "seo_review")
+    builder.add_conditional_edges(
+        "seo_review",
+        route_after_seo_review,
+        {"end": END, "seo_agent": "seo_agent"},
     )
 
     return builder
@@ -136,5 +146,5 @@ async def get_graph():
         from .checkpointer import get_checkpointer
         checkpointer = await get_checkpointer()
         _graph = _build_graph().compile(checkpointer=checkpointer)
-        logger.info("LangGraph compiled: 15 nodes, 5 interrupt points")
+        logger.info("LangGraph compiled: 17 nodes, 5 interrupt points")
     return _graph

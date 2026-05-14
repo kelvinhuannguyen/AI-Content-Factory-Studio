@@ -21,14 +21,14 @@ logger = logging.getLogger(__name__)
 _resume_locks: set[str] = set()  # prevent concurrent resume on same project
 
 
-async def _do_resume(project_id: str, step: str, action: str, approved: bool) -> None:
+async def _do_resume(project_id: str, step: str, action: str, approved: bool, package: str = "a") -> None:
     """Run LangGraph resume in background — avoids browser timeout on slow nodes."""
     if project_id in _resume_locks:
         logger.warning("Resume already in progress for project %s — skipping duplicate", project_id)
         return
     _resume_locks.add(project_id)
     try:
-        resume_value = await _build_resume_value(step, approved, project_id, action)
+        resume_value = await _build_resume_value(step, approved, project_id, action, package)
         from ...langgraph.graph import get_graph
         from ...langgraph.checkpointer import get_thread_config
         from langgraph.types import Command
@@ -63,6 +63,7 @@ async def process_approval_via_link(
     token: str,
     background_tasks: BackgroundTasks,
     action: str = Query(..., pattern="^(approve|reject|proceed|remake|hold)$"),
+    package: str = Query(default="a", pattern="^[ab]$"),
 ):
     """
     Endpoint được gọi khi user click link trong email (GET request).
@@ -84,10 +85,10 @@ async def process_approval_via_link(
     step       = payload["step"]
     approved   = action in ("approve", "proceed")
 
-    logger.info("Email approval: project=%s step=%s action=%s", project_id, step, action)
+    logger.info("Email approval: project=%s step=%s action=%s package=%s", project_id, step, action, package)
 
     # Resume chạy background — tránh browser timeout khi node mất nhiều phút
-    background_tasks.add_task(_do_resume, project_id, step, action, approved)
+    background_tasks.add_task(_do_resume, project_id, step, action, approved, package)
 
     return _action_html(action, step)
 
@@ -97,6 +98,7 @@ async def process_approval_api(
     token: str,
     background_tasks: BackgroundTasks,
     action: str = Query(..., pattern="^(approve|reject|proceed|remake|hold)$"),
+    package: str = Query(default="a", pattern="^[ab]$"),
 ):
     """Programmatic approval (frontend wizard, Telegram). Same logic as GET."""
     payload = await resolve_token(token)
@@ -111,15 +113,15 @@ async def process_approval_api(
     step       = payload["step"]
     approved   = action in ("approve", "proceed")
 
-    logger.info("API approval: project=%s step=%s action=%s", project_id, step, action)
-    background_tasks.add_task(_do_resume, project_id, step, action, approved)
+    logger.info("API approval: project=%s step=%s action=%s package=%s", project_id, step, action, package)
+    background_tasks.add_task(_do_resume, project_id, step, action, approved, package)
 
     return _action_html(action, step)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-async def _build_resume_value(step: str, approved: bool, project_id: str, action: str = "approve") -> dict:
+async def _build_resume_value(step: str, approved: bool, project_id: str, action: str = "approve", package: str = "a") -> dict:
     """
     Trả về resume dict phù hợp với từng interrupt node.
 
@@ -152,7 +154,9 @@ async def _build_resume_value(step: str, approved: bool, project_id: str, action
         # action is one of: proceed, remake, hold
         return {"action": action}
 
-    # seo_review và các bước khác
+    if step == "seo_review":
+        return {"approved": approved, "selected_package": package}
+
     return {"approved": approved}
 
 

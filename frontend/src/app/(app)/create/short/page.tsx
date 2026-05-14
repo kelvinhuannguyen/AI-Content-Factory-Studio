@@ -24,15 +24,23 @@ const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/
 
 function pipelineStateToStep(state: { paused_at?: string; current_stage?: string; status?: string }): number {
   const { paused_at, current_stage, status } = state;
+  // Interrupt checkpoints
+  if (paused_at === "seo_review") return 7;
   if (paused_at === "video_review") return 6;
   if (paused_at === "scene_review") return 4;
   if (paused_at === "character_review") return 3;
   if (paused_at === "script_review") return 2;
-  if (current_stage === "video_editor" || current_stage === "video_validator") return 5;
+  // Running stages
+  if (current_stage === "seo_agent" || current_stage === "seo_review") return 7;
+  if (
+    current_stage === "video_editor" || current_stage === "video_validator" ||
+    current_stage === "final_assembler" || current_stage === "continuity_director" ||
+    current_stage === "cinematic_decomposer"
+  ) return 5;
   if (current_stage === "scene_planner" || current_stage === "scene_review") return 4;
-  if (current_stage === "character_designer") return 3;
+  if (current_stage === "character_designer" || current_stage === "character_scorer") return 3;
   if (current_stage === "screenwriter" || current_stage === "script_scorer") return 2;
-  if (status === "completed") return 6;
+  if (status === "completed") return 7;
   return 0;
 }
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CheckCircle2, XCircle, ArrowLeft, ArrowRight, Play, Loader2, Sparkles, RefreshCw } from "lucide-react";
+import { CheckCircle2, XCircle, ArrowLeft, ArrowRight, Play, Loader2, Sparkles, RefreshCw, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSSE } from "@/hooks/useSSE";
 import { useWizardStore } from "@/stores/wizardStore";
@@ -40,7 +40,18 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
   const { project } = useWizardStore();
   const projectId = project?.id ?? null;
 
+  interface TechAudit {
+    codec?: string; codec_ok?: boolean;
+    height?: number; resolution_ok?: boolean;
+    fps?: number; fps_ok?: boolean;
+    bitrate_kbps?: number; bitrate_ok?: boolean;
+    audio_codec?: string; audio_ok?: boolean;
+    duration_s?: number; duration_ok?: boolean;
+    error?: string;
+  }
+
   const [score, setScore] = useState<ScoreData | null>(null);
+  const [techAudit, setTechAudit] = useState<TechAudit | null>(null);
   const [scoring, setScoring] = useState(false);
   const [decision, setDecision] = useState<boolean | null>(null);
   const [rejectNote, setRejectNote] = useState("");
@@ -59,6 +70,11 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
           if (data.human_approved !== null) setDecision(data.human_approved);
         }
       })
+      .catch(() => {});
+    // Load technical audit from pipeline state
+    fetch(`${BASE}/pipeline/${projectId}/state`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((st) => { if (st?.video_tech_audit) setTechAudit(st.video_tech_audit); })
       .catch(() => {});
   }, [projectId]);
 
@@ -141,6 +157,31 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
           {score ? "Chấm lại" : "Chấm điểm"}
         </button>
       </div>
+
+      {/* Technical audit panel */}
+      {techAudit && !techAudit.error && (
+        <div className="rounded-lg border border-border p-3 space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Kiểm tra kỹ thuật</p>
+          <div className="grid grid-cols-3 gap-x-4 gap-y-1.5">
+            {([
+              { label: "Codec",        ok: techAudit.codec_ok,       value: techAudit.codec },
+              { label: "Độ phân giải", ok: techAudit.resolution_ok,  value: techAudit.height ? `${techAudit.height}p` : "—" },
+              { label: "FPS",          ok: techAudit.fps_ok,         value: techAudit.fps ? `${techAudit.fps}fps` : "—" },
+              { label: "Bitrate",      ok: techAudit.bitrate_ok,     value: techAudit.bitrate_kbps ? `${techAudit.bitrate_kbps}kbps` : "—" },
+              { label: "Audio",        ok: techAudit.audio_ok,       value: techAudit.audio_codec },
+              { label: "Thời lượng",   ok: techAudit.duration_ok,    value: techAudit.duration_s ? `${techAudit.duration_s}s` : "—" },
+            ] as { label: string; ok?: boolean; value?: string | number }[]).map(({ label, ok, value }) => (
+              <div key={label} className="flex items-center gap-1.5 text-xs">
+                {ok
+                  ? <CheckCircle2 className="h-3 w-3 text-green-500 shrink-0" />
+                  : <AlertCircle className="h-3 w-3 text-amber-500 shrink-0" />}
+                <span className="text-muted-foreground">{label}:</span>
+                <span className="font-medium">{String(value ?? "—")}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Empty / loading state */}
       {!score && (
