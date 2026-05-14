@@ -77,6 +77,8 @@ async def _send_telegram(text: str, buttons: list[dict]) -> None:
 
 
 # ── Email body builders ───────────────────────────────────────────────────────
+# Table-based layout — compatible with Outlook 2007-2021, Gmail, Apple Mail, Yahoo.
+# Buttons use MSO VML (Outlook) + standard <a> fallback for modern clients.
 
 _STEP_LABELS = {
     "script_review":    "Duyệt Kịch Bản",
@@ -87,45 +89,169 @@ _STEP_LABELS = {
     "seo_review":       "Duyệt Gói SEO",
 }
 
+_FONT = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+_BG   = "#f4f4f5"
+_CARD = "#ffffff"
+_TEXT = "#18181b"
+_MUTED = "#71717a"
+_BORDER = "#e4e4e7"
+_BRAND = "#6d28d9"   # violet-700
+
+
+def _vml_btn(url: str, label: str, bg: str, width: int = 240) -> str:
+    """MSO VML rounded button — renders correctly in Outlook 2007-2021."""
+    return (
+        f'<!--[if mso]><v:roundrect xmlns:v="urn:schemas-microsoft-com:vml" '
+        f'href="{url}" style="height:44px;width:{width}px;v-text-anchor:middle;" '
+        f'arcsize="12%" stroke="f" fillcolor="{bg}">'
+        f'<w:anchorlock/><center style="{_FONT};color:#ffffff;font-size:14px;'
+        f'font-weight:700;">{label}</center></v:roundrect><![endif]-->'
+        f'<!--[if !mso]><!-->'
+        f'<a href="{url}" style="display:inline-block;background:{bg};color:#ffffff;'
+        f'{_FONT};font-size:14px;font-weight:700;text-decoration:none;'
+        f'padding:12px 28px;border-radius:6px;mso-hide:all;">{label}</a>'
+        f'<!--<![endif]-->'
+    )
+
+
+def _base_template(
+    preheader: str,
+    headline: str,
+    subhead: str,
+    body_rows: str,
+    footer_lines: str,
+) -> str:
+    return f"""<!DOCTYPE html>
+<html lang="vi" xmlns:v="urn:schemas-microsoft-com:vml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="x-apple-disable-message-reformatting">
+<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->
+<title>{headline}</title>
+</head>
+<body style="margin:0;padding:0;background:{_BG};{_FONT};">
+<!--[if mso | IE]><table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="background:{_BG};"><tr><td><![endif]-->
+
+<!-- Preheader (hidden preview text) -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;
+  color:{_BG};font-size:1px;line-height:1px;">{preheader}&nbsp;&#847;&nbsp;&#847;&nbsp;&#847;</div>
+
+<!-- Outer wrapper -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background:{_BG};margin:0;padding:0;">
+  <tr>
+    <td align="center" style="padding:40px 16px;">
+
+      <!-- Card -->
+      <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0"
+        style="background:{_CARD};border-radius:8px;border:1px solid {_BORDER};
+               width:100%;max-width:560px;">
+
+        <!-- Brand header bar -->
+        <tr>
+          <td style="background:{_BRAND};border-radius:8px 8px 0 0;padding:20px 32px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td>
+                  <span style="color:#ffffff;{_FONT};font-size:16px;font-weight:700;
+                    letter-spacing:-0.01em;">AI Content Factory</span>
+                </td>
+                <td align="right">
+                  <span style="color:rgba(255,255,255,0.7);{_FONT};font-size:12px;">Studio</span>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:32px;">
+
+            <!-- Headline -->
+            <h1 style="margin:0 0 4px;{_FONT};font-size:22px;font-weight:700;
+              color:{_TEXT};letter-spacing:-0.02em;">{headline}</h1>
+            <p style="margin:0 0 28px;{_FONT};font-size:14px;color:{_MUTED};">{subhead}</p>
+
+            <!-- Dynamic body rows -->
+            {body_rows}
+
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:16px 32px 28px;border-top:1px solid {_BORDER};">
+            <p style="margin:0;{_FONT};font-size:12px;color:{_MUTED};line-height:1.6;">
+              {footer_lines}
+            </p>
+          </td>
+        </tr>
+
+      </table>
+      <!-- /Card -->
+
+    </td>
+  </tr>
+</table>
+
+<!--[if mso | IE]></td></tr></table><![endif]-->
+</body>
+</html>"""
+
+
+def _info_row(label: str, value: str, extra: str = "") -> str:
+    extra_html = f'<p style="margin:6px 0 0;{_FONT};font-size:13px;color:{_MUTED};">{extra}</p>' if extra else ""
+    return f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background:#fafafa;border:1px solid {_BORDER};border-radius:6px;
+         margin-bottom:24px;">
+  <tr>
+    <td style="padding:14px 16px;">
+      <p style="margin:0 0 2px;{_FONT};font-size:11px;font-weight:600;color:{_MUTED};
+        text-transform:uppercase;letter-spacing:0.06em;">Dự án</p>
+      <p style="margin:0;{_FONT};font-size:16px;font-weight:700;color:{_TEXT};">{value}</p>
+      {extra_html}
+    </td>
+  </tr>
+</table>"""
+
 
 def _build_email_html(
     step_label: str, project_title: str, extra_info: str,
     approve_url: str, reject_url: str,
 ) -> str:
-    return f"""<!DOCTYPE html>
-<html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:20px;background:#f8fafc;font-family:system-ui,sans-serif">
-<div style="max-width:560px;margin:auto;background:white;border-radius:16px;padding:32px;box-shadow:0 2px 16px rgba(0,0,0,.08)">
-  <div style="text-align:center;margin-bottom:24px">
-    <span style="font-size:40px">🎬</span>
-    <h1 style="margin:8px 0 4px;font-size:22px;color:#1e293b">{step_label}</h1>
-    <p style="margin:0;color:#64748b;font-size:14px">AI Content Factory Studio</p>
-  </div>
-  <div style="background:#f1f5f9;border-radius:10px;padding:16px;margin-bottom:24px">
-    <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Dự án</p>
-    <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a">{project_title}</p>
-    {f'<p style="margin:8px 0 0;font-size:13px;color:#475569">{extra_info}</p>' if extra_info else ''}
-  </div>
-  <div style="display:flex;gap:12px;margin-bottom:24px">
-    <a href="{approve_url}"
-       style="flex:1;display:block;text-align:center;background:#16a34a;color:white;padding:14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
-      ✅ Duyệt
-    </a>
-    <a href="{reject_url}"
-       style="flex:1;display:block;text-align:center;background:#dc2626;color:white;padding:14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">
-      ❌ Từ chối
-    </a>
-  </div>
-  <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
-    Link hết hạn sau 48 giờ · Chỉ dùng được 1 lần
-  </p>
-  <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
-  <p style="margin:0;font-size:11px;color:#cbd5e1;word-break:break-all">
-    Approve: {approve_url}<br>Reject: {reject_url}
-  </p>
-</div>
-</body></html>"""
+    info = _info_row("Dự án", project_title, extra_info)
+    buttons = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+  style="margin-bottom:28px;">
+  <tr>
+    <td width="48%" align="center">
+      {_vml_btn(approve_url, "Duyệt", "#16a34a", 220)}
+    </td>
+    <td width="4%"></td>
+    <td width="48%" align="center">
+      {_vml_btn(reject_url, "Từ chối", "#dc2626", 220)}
+    </td>
+  </tr>
+</table>"""
+    footer = (
+        f'Link hết hạn sau <strong>48 giờ</strong> &middot; Chỉ dùng được 1 lần.<br>'
+        f'Nếu nút không hoạt động, copy URL bên dưới:<br>'
+        f'<span style="color:{_BRAND};">Duyệt:</span> '
+        f'<a href="{approve_url}" style="color:{_BRAND};word-break:break-all;">{approve_url}</a><br>'
+        f'<span style="color:#dc2626;">Từ chối:</span> '
+        f'<a href="{reject_url}" style="color:#dc2626;word-break:break-all;">{reject_url}</a>'
+    )
+    return _base_template(
+        preheader=f"Yêu cầu duyệt: {step_label} — {project_title}",
+        headline=step_label,
+        subhead="Vui lòng xem xét và chọn hành động bên dưới.",
+        body_rows=info + buttons,
+        footer_lines=footer,
+    )
 
 
 def _build_video_review_html(
@@ -133,50 +259,65 @@ def _build_video_review_html(
     proceed_url: str, remake_url: str, hold_url: str,
 ) -> str:
     score_color = "#16a34a" if overall_score >= 75 else "#d97706"
-    status_text = "✓ Đạt ngưỡng chất lượng (≥75)" if overall_score >= 75 else "⚠ Chưa đạt ngưỡng (<75)"
-    status_color = "#16a34a" if overall_score >= 75 else "#d97706"
-    return f"""<!DOCTYPE html>
-<html lang="vi">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:20px;background:#f8fafc;font-family:system-ui,sans-serif">
-<div style="max-width:560px;margin:auto;background:white;border-radius:16px;padding:32px;box-shadow:0 2px 16px rgba(0,0,0,.08)">
-  <div style="text-align:center;margin-bottom:24px">
-    <span style="font-size:40px">🎬</span>
-    <h1 style="margin:8px 0 4px;font-size:22px;color:#1e293b">Duyệt Video Final</h1>
-    <p style="margin:0;color:#64748b;font-size:14px">AI Content Factory Studio</p>
-  </div>
-  <div style="background:#f1f5f9;border-radius:10px;padding:16px;margin-bottom:16px">
-    <p style="margin:0 0 4px;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em">Dự án</p>
-    <p style="margin:0;font-size:16px;font-weight:600;color:#0f172a">{project_title}</p>
-  </div>
-  <div style="text-align:center;background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:24px">
-    <div style="font-size:48px;font-weight:900;color:{score_color}">{overall_score}</div>
-    <div style="font-size:14px;color:#64748b">/ 100 điểm · AI Score: {ai_score}/10</div>
-    <div style="font-size:13px;margin-top:4px;color:{status_color}">{status_text}</div>
-  </div>
-  <div style="display:flex;gap:10px;margin-bottom:24px">
-    <a href="{proceed_url}"
-       style="flex:1;display:block;text-align:center;background:#16a34a;color:white;padding:14px 8px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
-      ✅ Tiếp tục
-    </a>
-    <a href="{remake_url}"
-       style="flex:1;display:block;text-align:center;background:#d97706;color:white;padding:14px 8px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
-      🔄 Làm lại
-    </a>
-    <a href="{hold_url}"
-       style="flex:1;display:block;text-align:center;background:#64748b;color:white;padding:14px 8px;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px">
-      ⏸ Tạm dừng
-    </a>
-  </div>
-  <p style="margin:0;font-size:12px;color:#94a3b8;text-align:center">
-    Link hết hạn sau 48 giờ · Chỉ dùng được 1 lần mỗi link
-  </p>
-  <hr style="border:none;border-top:1px solid #e2e8f0;margin:16px 0">
-  <p style="margin:0;font-size:11px;color:#cbd5e1;word-break:break-all">
-    Proceed: {proceed_url}<br>Remake: {remake_url}<br>Hold: {hold_url}
-  </p>
-</div>
-</body></html>"""
+    status_text = "Dat nguong chat luong (>=75/100)" if overall_score >= 75 else "Chua dat nguong (<75/100)"
+    bar_pct = min(100, overall_score)
+
+    info = _info_row("Dự án", project_title)
+    score_block = f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background:#fafafa;border:1px solid {_BORDER};border-radius:6px;
+         margin-bottom:8px;">
+  <tr>
+    <td style="padding:20px 24px;text-align:center;">
+      <p style="margin:0 0 4px;{_FONT};font-size:52px;font-weight:900;
+        color:{score_color};line-height:1;">{overall_score}</p>
+      <p style="margin:0 0 6px;{_FONT};font-size:14px;color:{_MUTED};">
+        / 100 &nbsp;&middot;&nbsp; AI Score: {ai_score}/10</p>
+      <!-- Score bar -->
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+        style="background:#e4e4e7;border-radius:4px;height:6px;margin:0 auto 8px;">
+        <tr>
+          <td width="{bar_pct}%" style="background:{score_color};border-radius:4px;height:6px;"></td>
+          <td></td>
+        </tr>
+      </table>
+      <p style="margin:0;{_FONT};font-size:13px;color:{score_color};font-weight:600;">
+        {status_text}</p>
+    </td>
+  </tr>
+</table>
+<p style="margin:0 0 20px;{_FONT};font-size:12px;color:{_MUTED};text-align:center;">
+  Chọn hành động phù hợp để tiếp tục luồng sản xuất.</p>"""
+
+    buttons = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+  style="margin-bottom:28px;">
+  <tr>
+    <td width="32%" align="center" style="padding:0 4px 0 0;">
+      {_vml_btn(proceed_url, "Tiep tuc", "#16a34a", 160)}
+    </td>
+    <td width="32%" align="center" style="padding:0 2px;">
+      {_vml_btn(remake_url, "Lam lai", "#d97706", 160)}
+    </td>
+    <td width="32%" align="center" style="padding:0 0 0 4px;">
+      {_vml_btn(hold_url, "Tam dung", "#52525b", 160)}
+    </td>
+  </tr>
+</table>"""
+
+    footer = (
+        f'Link hết hạn sau <strong>48 giờ</strong> &middot; Mỗi link chỉ dùng được 1 lần.<br>'
+        f'<a href="{proceed_url}" style="color:#16a34a;word-break:break-all;">Tiep tuc</a> &nbsp;|&nbsp; '
+        f'<a href="{remake_url}" style="color:#d97706;word-break:break-all;">Lam lai</a> &nbsp;|&nbsp; '
+        f'<a href="{hold_url}" style="color:#52525b;word-break:break-all;">Tam dung</a>'
+    )
+    return _base_template(
+        preheader=f"Video dat {overall_score}/100 diem — chon hanh dong",
+        headline="Duyet Video Final",
+        subhead=f"AI da cham diem video cua ban: {overall_score}/100 diem.",
+        body_rows=info + score_block + buttons,
+        footer_lines=footer,
+    )
 
 
 # ── Public API ─────────────────────────────────────────────────────────────────
