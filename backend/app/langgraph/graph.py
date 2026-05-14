@@ -1,12 +1,12 @@
-"""LangGraph StateGraph — 12 nodes, 5 interrupt points.
+"""LangGraph StateGraph — 13 nodes, 5 interrupt points.
 
 Graph flow:
   screenwriter → script_scorer → script_review(INTERRUPT) → character_designer
     ↑ retry < 8/10                ↑ human reject loops back
   → character_scorer → character_review(INTERRUPT) → scene_planner → scene_review(INTERRUPT)
      ↑ AI retry < 8/10   ↑ human reject loops back to character_designer
-  → video_editor → video_validator → video_review(INTERRUPT) → END
-     ↑ AI retry < 8/10  ↑ remake loops back
+  → cinematic_decomposer (NEW) → video_editor → video_validator → video_review(INTERRUPT) → END
+                                   ↑ AI retry < 8/10  ↑ remake loops back
 """
 from __future__ import annotations
 import logging
@@ -36,6 +36,7 @@ from .nodes.scene_planner import (
     scene_review_node,
     route_after_scene_review,
 )
+from .nodes.cinematic_decomposer import cinematic_decomposer_node
 from .nodes.video_editor import video_editor_node
 from .nodes.video_validator import (
     video_validator_node,
@@ -59,9 +60,10 @@ def _build_graph():
     builder.add_node("character_designer", character_designer_node)
     builder.add_node("character_scorer",   character_scorer_node)
     builder.add_node("character_review",   character_review_node)
-    builder.add_node("scene_planner",      scene_planner_node)
-    builder.add_node("scene_review",       scene_review_node)
-    builder.add_node("video_editor",       video_editor_node)
+    builder.add_node("scene_planner",           scene_planner_node)
+    builder.add_node("scene_review",            scene_review_node)
+    builder.add_node("cinematic_decomposer",    cinematic_decomposer_node)
+    builder.add_node("video_editor",            video_editor_node)
     builder.add_node("video_validator",    video_validator_node)
     builder.add_node("video_review",       video_review_node)
 
@@ -99,8 +101,10 @@ def _build_graph():
     builder.add_conditional_edges(
         "scene_review",
         route_after_scene_review,
-        {"video_editor": "video_editor", "scene_planner": "scene_planner"},
+        # approved → cinematic_decomposer (intercept before video_editor); rejected → scene_planner
+        {"video_editor": "cinematic_decomposer", "scene_planner": "scene_planner"},
     )
+    builder.add_edge("cinematic_decomposer", "video_editor")
 
     # ── Video pipeline ────────────────────────────────────────────────────
     builder.add_edge("video_editor", "video_validator")
@@ -125,5 +129,5 @@ async def get_graph():
         from .checkpointer import get_checkpointer
         checkpointer = await get_checkpointer()
         _graph = _build_graph().compile(checkpointer=checkpointer)
-        logger.info("LangGraph compiled: 12 nodes, 5 interrupt points")
+        logger.info("LangGraph compiled: 13 nodes, 5 interrupt points")
     return _graph

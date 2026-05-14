@@ -68,7 +68,13 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
   const handleSSE = useCallback((event: { type: string; task_type?: string; scene_id?: string; message?: string; error?: string }) => {
     const { type, task_type, scene_id } = event;
 
-    if (type === "pipeline_start" || type === "pipeline_queued") {
+    // Cinematic Decomposer events
+    if (type === "agent_start" && (event as any).agent === "cinematic_decomposer") {
+      setPipelineMsg(event.message || "Cinematic Director đang phân rã cảnh quay thành shots ≤8s...");
+    } else if (type === "agent_done" && (event as any).agent === "cinematic_decomposer") {
+      const shotCount = (event as any).shot_count ?? 0;
+      setPipelineMsg(`Phân rã hoàn thành — ${shotCount} shots sẵn sàng để render`);
+    } else if (type === "pipeline_start" || type === "pipeline_queued") {
       setPipelineMsg(event.message || "Pipeline đang chạy...");
     } else if (type === "task_start" && task_type) {
       setTasks((prev) => prev.map((t) => {

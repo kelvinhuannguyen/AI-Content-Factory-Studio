@@ -33,6 +33,8 @@ class ProductionState(TypedDict):
 
     # ── Video Pipeline ────────────────────────────────────────────────────
     scenes: list[dict]                # [{id, scene_number, video_prompt, duration_seconds}]
+    lookbook: Optional[dict]          # {ref_id: {key_identifier, constant_elements, image_url, ...}}
+    shots: list[dict]                 # decomposed shots from cinematic_decomposer (≤8s each)
     video_clips: list[dict]           # [{scene_id, clip_r2_key, status}]
     voiceover_r2_key: Optional[str]
     final_video_r2_key: Optional[str]
@@ -93,6 +95,8 @@ def initial_state(
         character_count=None,
         # Video Pipeline
         scenes=[],
+        lookbook=None,
+        shots=[],
         video_clips=[],
         voiceover_r2_key=None,
         final_video_r2_key=None,

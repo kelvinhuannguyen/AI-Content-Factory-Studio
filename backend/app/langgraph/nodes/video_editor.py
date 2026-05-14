@@ -65,26 +65,64 @@ async def video_editor_node(state: ProductionState) -> dict:
         await publish_event(project_id, {"type": "agent_error", "agent": "video_editor", "error": "Không có cảnh nào"})
         return {"error": "No scenes found", "current_stage": "video_editor"}
 
-    await publish_event(project_id, {
-        "type": "pipeline_queued",
-        "scene_count": len(scenes),
-        "message": f"Đang tạo {len(scenes)} clip + giọng đọc + subtitle + nhạc nền...",
-    })
+    # ── 1b. Load shots (from cinematic_decomposer) or fall back to scenes ──
+    from ...models.shot import Shot as ShotModel
+    async with AsyncSessionLocal() as db:
+        shot_result = await db.execute(
+            select(ShotModel)
+            .where(ShotModel.project_id == pid, ShotModel.status == "APPROVED")
+            .order_by(ShotModel.scene_id, ShotModel.shot_number)
+        )
+        shots = shot_result.scalars().all()
+
+    # Use shots if available (cinematic_decomposer ran), else fall back to scenes
+    use_shots = len(shots) > 0
+
+    if use_shots:
+        clip_items = [
+            {
+                "id": str(s.id),
+                "prompt": s.prompt,
+                "duration": min(s.duration, 8),
+                "label": s.shot_id,
+            }
+            for s in shots
+        ]
+        await publish_event(project_id, {
+            "type": "pipeline_queued",
+            "shot_count": len(shots),
+            "message": f"Đang tạo {len(shots)} shots ≤8s (Cinematic) + giọng đọc + subtitle + nhạc nền...",
+        })
+    else:
+        clip_items = [
+            {
+                "id": str(s.id),
+                "prompt": s.video_prompt or f"Scene {s.scene_number}: {s.description or s.title or ''}",
+                "duration": s.duration_seconds or 8,
+                "label": f"SC{s.scene_number:02d}",
+            }
+            for s in scenes
+        ]
+        await publish_event(project_id, {
+            "type": "pipeline_queued",
+            "scene_count": len(scenes),
+            "message": f"Đang tạo {len(scenes)} clip + giọng đọc + subtitle + nhạc nền...",
+        })
 
     # ── 2. Generate video clips (sequential) ─────────────────────────────
     from ...tasks.video_tasks import _generate_clip_async
     from ...tasks.pipeline_tasks import _MockTask
 
-    for scene in scenes:
+    for item in clip_items:
         try:
             await _generate_clip_async(
-                _MockTask(), project_id, str(scene.id),
-                scene.video_prompt or f"Scene {scene.scene_number}: {scene.description or scene.title or ''}",
-                scene.duration_seconds or 8,
+                _MockTask(), project_id, item["id"],
+                item["prompt"],
+                item["duration"],
                 aspect_ratio,
             )
         except Exception as e:
-            logger.error("Clip failed scene %s: %s", scene.id, e)
+            logger.error("Clip failed %s: %s", item["label"], e)
 
     # ── 3. Generate voiceover + BGM concurrently ──────────────────────────
     from ...tasks.tts_tasks import _tts_async

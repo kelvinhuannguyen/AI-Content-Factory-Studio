@@ -342,3 +342,107 @@ Trả về JSON:
   "engagement_potential": 5,
   "gpt_feedback": "Nhận xét chi tiết (3-5 câu): điểm mạnh, điểm yếu, đề xuất cải thiện"
 }}"""
+
+
+# ── Cinematic Scene Decomposer ────────────────────────────────────────────
+CINEMATIC_DECOMPOSER_SYSTEM = """You are a Senior Cinematic Technical Director specializing in AI video production.
+Your task: decompose each scene into production-ready shots for Kling-3-Pro AI video generation.
+Each shot must be independently executable and visually coherent in ≤8 seconds.
+
+OUTPUT ONLY valid JSON. No markdown, no explanation outside the JSON.
+
+4-STEP WORKFLOW (execute for every scene):
+
+STEP 1 — Shot Slicing (≤8 seconds per shot)
+- Maximum 8 seconds per shot. Each shot has ONE action focus — no multi-action per clip.
+- Ensure logical cinematic flow: Establishing Shot → Medium Shot → Close-up.
+- If scene duration ≤ 8s: output 1 shot. If 9-16s: 2 shots. If 17-24s: 3 shots.
+
+STEP 2 — Character Consistency (Ref ID anchoring)
+- Always use the Character Ref ID (#CHAR_01 etc.) in the prompt.
+- Repeat core visual traits inline: "[#CHAR_01] Vietnamese man jet black hair scar above left brow..."
+- Multi-character spatial anchoring: "left frame", "right frame", "background", "facing each other".
+
+STEP 3 — Production Formula (mandatory prompt structure)
+Every prompt must follow: [Style&Mood] + [CameraMove] + [CharacterAction&ID] + [Environment&Lighting] + [MotionIntensity]
+Camera terms: dolly zoom, tracking shot, pan, tilt, low-angle, close-up, establishing wide shot.
+Lighting terms: volumetric rays, rim light, cinematic lighting, golden hour, neon backlit, practical lights.
+Style tokens: cinematic=raw footage 35mm grain; animation-3d=Unreal Engine 5 subsurface scattering; cyberpunk=neon saturation chromatic aberration.
+
+STEP 4 — Self-QC (score before accepting)
+Score each shot on: Fidelity(3pts) + Consistency(3pts) + Clarity(2pts) + Feasibility(2pts) = 10pts max.
+If score < 8: rewrite the prompt internally until ≥ 8.
+If after 2 rewrites still < 8: output with status "REJECTED" (pipeline will use fallback).
+
+GUARDRAILS:
+- No generic adjectives: "beautiful", "amazing", "wonderful" — use technical/cinematic terms.
+- No outfit changes between shots unless script explicitly states a scene change.
+- No physically impossible actions in 8 seconds (no chase + fight + explosion in 1 shot).
+- Aspect ratio always 16:9 for cinematic."""
+
+
+def cinematic_decomposer_user(
+    scene_number: int,
+    scene_title: str,
+    scene_description: str,
+    scene_duration_seconds: int,
+    scene_video_prompt: str,
+    characters_in_scene: list,
+    lookbook: dict,
+    genre: str,
+    style: str,
+) -> str:
+    """Build user prompt for the Cinematic Scene Decomposer node."""
+    # Only include characters actually in this scene
+    relevant_lookbook = {
+        ref_id: data
+        for ref_id, data in lookbook.items()
+        if not characters_in_scene or ref_id in characters_in_scene
+    }
+
+    lookbook_block = "\n".join(
+        f"  {ref_id}: {data.get('key_identifier', data.get('name', ref_id))}"
+        for ref_id, data in relevant_lookbook.items()
+    ) or "  (no named characters — environmental/narration scene)"
+
+    invariants_block = "\n".join(
+        f"  {ref_id}: {', '.join(data.get('constant_elements', []))}"
+        for ref_id, data in relevant_lookbook.items()
+        if data.get("constant_elements")
+    ) or "  (none specified)"
+
+    # Calculate expected shot count for guidance
+    expected_shots = max(1, (scene_duration_seconds + 7) // 8)
+
+    return f"""Decompose this scene into {expected_shots} production-ready shot(s):
+
+SCENE {scene_number:02d}: {scene_title}
+Total duration: {scene_duration_seconds}s → expect ~{expected_shots} shot(s) of ≤8s
+Scene description: {scene_description}
+Base video concept (enhance, don't copy verbatim): {scene_video_prompt}
+Genre: {genre} | Style: {style} | Aspect ratio: 16:9
+
+CHARACTER VISUAL ANCHORS (embed ref_id + traits in every shot they appear):
+{lookbook_block}
+
+CONSTANT ELEMENTS (must appear in every shot containing these characters):
+{invariants_block}
+
+Characters in this scene: {characters_in_scene or ['(none — narration/environmental)' ]}
+
+Return JSON:
+{{
+  "scene_id": "SC{scene_number:02d}",
+  "shots": [
+    {{
+      "shot_id": "SC{scene_number:02d}_SH01",
+      "shot_number": 1,
+      "duration": 8,
+      "prompt": "[Style&Mood], [CameraMove], [CharacterAction with Ref IDs and core traits], [Environment&Lighting], [MotionIntensity]",
+      "characters_present": ["#CHAR_01"],
+      "qc_score": 8.5,
+      "qc_notes": "Brief QC note",
+      "status": "APPROVED"
+    }}
+  ]
+}}
