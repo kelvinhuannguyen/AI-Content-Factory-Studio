@@ -137,14 +137,16 @@ async def resume_pipeline(
         # No selected_character_id — all characters are approved together
         resume_value = {"approved": approved}
     elif step == "scene":
-        resume_value = {
-            "approved": approved,
-        }
+        resume_value = {"approved": approved}
+    elif step == "shot_review":
+        resume_value = {"approved": approved}
+    elif step == "seo_review":
+        resume_value = {"approved": approved, "selected_package": body.get("selected_package", "a")}
     elif step == "video_review":
         action = body.get("action", "proceed")
         resume_value = {"action": action}
     else:
-        raise HTTPException(422, f"Unknown step '{step}'. Valid: 'script', 'character', 'scene', 'video_review'")
+        raise HTTPException(422, f"Unknown step '{step}'. Valid: 'script', 'character', 'scene', 'shot_review', 'seo_review'")
 
     async def _run_resume():
         try:
@@ -174,6 +176,44 @@ async def get_pipeline_state(project_id: uuid.UUID, db: AsyncSession = Depends(g
     except Exception as e:
         logger.error("Pipeline state error for %s: %s", project_id, e)
         return {"status": "not_started", "current_stage": None, "paused_at": None, "langgraph_error": str(e)}
+
+
+@router.post("/{project_id}/continue", status_code=202)
+async def continue_pipeline(
+    project_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Re-invoke pipeline from current checkpoint — no Command needed.
+    Use this after a Railway container restart killed in-progress video generation.
+    Returns 400 if pipeline hasn't started, is done, or is waiting at an interrupt.
+    """
+    await _get_project_or_404(project_id, db)
+
+    graph = await get_graph()
+    config = get_thread_config(str(project_id))
+
+    state = await graph.aget_state(config)
+    if not state or not state.values:
+        raise HTTPException(400, "Pipeline chưa bắt đầu. Dùng /start để khởi động.")
+    if not state.next:
+        raise HTTPException(400, "Pipeline đã hoàn thành.")
+
+    interrupt_nodes = {"character_review", "shot_review", "seo_review"}
+    next_nodes = set(state.next or [])
+    if next_nodes & interrupt_nodes:
+        waiting = next_nodes & interrupt_nodes
+        raise HTTPException(400, f"Pipeline đang chờ duyệt tại {waiting}. Dùng /resume.")
+
+    async def _run_continue():
+        try:
+            await graph.ainvoke({}, config=config)
+        except Exception as e:
+            logger.error("Pipeline continue error for %s: %s", project_id, e)
+
+    background_tasks.add_task(_run_continue)
+    return {"status": "continuing", "next_nodes": list(state.next), "project_id": str(project_id)}
 
 
 @router.delete("/{project_id}/reset", status_code=204)
