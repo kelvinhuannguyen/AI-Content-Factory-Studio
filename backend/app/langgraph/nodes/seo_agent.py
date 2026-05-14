@@ -163,6 +163,9 @@ async def seo_review_node(state: ProductionState) -> dict:
         "step": "seo_review",
         "seo_package": state.get("seo_package"),
         "project_id": project_id,
+        "video_url": state.get("final_video_r2_key"),
+        "video_ai_score": state.get("video_ai_score"),
+        "tech_audit": state.get("video_tech_audit"),
     })
 
     approved = decision.get("approved", True)

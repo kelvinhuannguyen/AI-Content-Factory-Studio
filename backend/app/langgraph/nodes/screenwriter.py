@@ -1,16 +1,13 @@
-"""Agent Screenwriter — viết kịch bản Hollywood + điểm dừng duyệt kịch bản."""
+"""Agent Screenwriter — viết kịch bản Hollywood. Không có interrupt — auto-advance."""
 from __future__ import annotations
 import uuid
 import logging
-
-from langgraph.types import interrupt
 
 from ...database import AsyncSessionLocal
 from ...models.script import Script
 from ...models.project import Project, ProjectStatus
 from ...services.llm_service import chat_json, LLMError
 from ...services.sse_service import publish_event
-from ...services.notification_service import send_approval_request
 from ...utils.prompt_templates import SCRIPT_SYSTEM, script_user
 from ..state import ProductionState
 
@@ -150,56 +147,14 @@ async def screenwriter_node(state: ProductionState) -> dict:
 
 
 async def script_review_node(state: ProductionState) -> dict:
-    """
-    Điểm dừng duyệt kịch bản:
-    - Gửi email Gmail với nút Duyệt / Từ chối
-    - Publish SSE event cho frontend
-    - interrupt() tạm dừng graph, chờ resume từ email hoặc GUI
-    """
-    project_id = state["project_id"]
-    script_content = state.get("script_content", "") or ""
-    word_count = len(script_content.split()) if script_content else 0
-    topic = state.get("topic", "")
-
-    await publish_event(project_id, {
-        "type": "agent_interrupt",
-        "step": "script_review",
-        "script_id": state.get("script_id"),
-        "message": "Kịch bản đã sẵn sàng. Đã gửi email duyệt.",
-    })
-
-    # Gửi email approval (đính kèm kịch bản + điểm AI)
-    project_title = await _fetch_project_title(project_id)
-    ai_score = state.get("script_ai_score")
-    score_note = f" · AI Score: {ai_score}/10" if ai_score else ""
-    extra = f"Chủ đề: {topic} | {word_count} từ{score_note}" if topic else f"{word_count} từ{score_note}"
-    try:
-        await send_approval_request(
-            project_id=project_id,
-            project_title=project_title,
-            step="script_review",
-            extra_info=extra,
-            script_content=script_content,
-        )
-    except Exception as e:
-        logger.warning("Email notification failed (script_review): %s", e)
-
-    decision: dict = interrupt({
-        "step": "script_review",
-        "script_id": state.get("script_id"),
-    })
-
-    approved: bool = decision.get("approved", False)
-    notes: str = decision.get("notes", "")
-
+    """Auto-approve: no interrupt. Script passes directly to character_designer."""
     return {
-        "script_approved": approved,
-        "rejection_notes": notes if not approved else None,
-        "approval_status": "approved" if approved else "rejected",
-        "current_stage": "character_designer" if approved else "screenwriter",
+        "script_approved": True,
+        "approval_status": "approved",
+        "current_stage": "character_designer",
+        "paused_at": None,
     }
 
 
 def route_after_script_review(state: ProductionState) -> str:
-    """Conditional edge: approved → character_designer, rejected → screenwriter."""
-    return "character_designer" if state.get("script_approved") else "screenwriter"
+    return "character_designer"

@@ -35,16 +35,24 @@ export default function StepSEO({ onNext, onBack }: StepProps) {
   const [approved, setApproved] = useState(false);
   const [pausedAt, setPausedAt] = useState<string | null>(null);
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoScore, setVideoScore] = useState<number | null>(null);
 
   // Load existing SEO + pipeline state on mount
   useEffect(() => {
     if (!projectId) return;
-    // Check pipeline state for seo_review interrupt
     fetch(`${BASE}/pipeline/${projectId}/state`)
       .then(r => r.ok ? r.json() : null)
-      .then(state => { if (state?.paused_at) setPausedAt(state.paused_at); })
+      .then(state => {
+        if (state?.paused_at) setPausedAt(state.paused_at);
+        if (state?.video_ai_score) setVideoScore(state.video_ai_score);
+      })
       .catch(() => {});
-    // Load SEO data
+    // Load video URL from quality endpoint
+    fetch(`${BASE}/quality/${projectId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.video_url) setVideoUrl(data.video_url); })
+      .catch(() => {});
     fetch(`${BASE}/seo/${projectId}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -164,13 +172,48 @@ export default function StepSEO({ onNext, onBack }: StepProps) {
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      {/* SEO Review interrupt panel */}
+      {/* Trạm 3 — Final Master interrupt panel */}
       {pausedAt === "seo_review" && seo && (
-        <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4 space-y-3">
-          <p className="text-sm font-semibold text-primary">Duyệt Gói SEO A/B — chọn gói để tiếp tục</p>
+        <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-4 space-y-4">
+          <div>
+            <p className="text-sm font-bold text-primary">Trạm 3 — Final Master</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Xem video + chọn gói SEO → Xuất bản lên YouTube</p>
+          </div>
+
+          {/* Video preview + score summary */}
+          {(videoUrl || videoScore) && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {videoUrl && (
+                <div className="aspect-video overflow-hidden rounded-lg border border-border bg-black">
+                  <video src={videoUrl} controls className="h-full w-full object-contain" />
+                </div>
+              )}
+              {videoScore && (
+                <div className="flex flex-col justify-center gap-2 p-3 rounded-lg border border-border bg-background">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Chất lượng video</p>
+                  <div className="flex items-baseline gap-1">
+                    <span className={cn("text-4xl font-black tabular-nums",
+                      videoScore >= 8 ? "text-green-600 dark:text-green-400" :
+                      videoScore >= 6 ? "text-amber-600" : "text-destructive"
+                    )}>
+                      {videoScore * 10}
+                    </span>
+                    <span className="text-sm text-muted-foreground">/100</span>
+                  </div>
+                  <p className={cn("text-xs font-medium",
+                    videoScore >= 8 ? "text-green-600 dark:text-green-400" : "text-amber-600"
+                  )}>
+                    {videoScore >= 8 ? "✓ Đạt yêu cầu" : "⚠ Đạt ngưỡng tối thiểu"}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* A/B package comparison */}
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-green-500/40 bg-green-500/5 p-3 space-y-1">
-              <p className="text-xs font-semibold text-green-700 dark:text-green-400">Gói A — SEO</p>
+              <p className="text-xs font-semibold text-green-700 dark:text-green-400">Gói A — SEO Tối ưu</p>
               {titlesA.map((t, i) => (
                 <p key={i} className="text-xs text-foreground/80 line-clamp-1">• {t}</p>
               ))}
@@ -182,27 +225,28 @@ export default function StepSEO({ onNext, onBack }: StepProps) {
               ))}
             </div>
           </div>
+
           <div className="flex gap-2">
             <button
               onClick={() => handleSeoApprove("a")}
               disabled={reviewSubmitting}
-              className="flex-1 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-40 transition-colors"
+              className="flex-1 rounded-lg bg-green-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-40 transition-colors"
             >
-              {reviewSubmitting ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : "✅ Chọn Gói A"}
+              {reviewSubmitting ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : "✅ Chọn A & Xuất bản"}
             </button>
             <button
               onClick={() => handleSeoApprove("b")}
               disabled={reviewSubmitting}
-              className="flex-1 rounded-lg bg-amber-600 px-3 py-2 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-40 transition-colors"
+              className="flex-1 rounded-lg bg-amber-600 px-3 py-2.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-40 transition-colors"
             >
-              {reviewSubmitting ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : "🔶 Chọn Gói B"}
+              {reviewSubmitting ? <Loader2 className="h-3 w-3 animate-spin mx-auto" /> : "🔶 Chọn B & Xuất bản"}
             </button>
             <button
               onClick={handleSeoRedo}
               disabled={reviewSubmitting}
-              className="rounded-lg border border-destructive px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40 transition-colors"
+              className="rounded-lg border border-destructive px-3 py-2.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-40 transition-colors"
             >
-              Viết lại
+              Viết lại SEO
             </button>
           </div>
         </div>

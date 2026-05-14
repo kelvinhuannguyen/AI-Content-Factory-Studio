@@ -76,9 +76,9 @@ IMPORTANT: Output ONLY the JSON object. Nothing before or after it."""
 
 
 def route_after_script_scorer(state: ProductionState) -> str:
-    """score ≥ 8 OR retry ≥ 3 → script_review; else → screenwriter (auto-retry)."""
+    """score ≥ 8 OR retry ≥ 3 → character_designer (no human gate); else → screenwriter."""
     score = state.get("script_ai_score", 0) or 0
     retries = state.get("script_retry_count", 0)
     if score >= 8 or retries >= 3:
-        return "script_review"
+        return "character_designer"
     return "screenwriter"

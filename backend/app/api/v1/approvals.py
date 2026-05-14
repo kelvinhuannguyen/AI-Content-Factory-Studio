@@ -144,6 +144,9 @@ async def _build_resume_value(step: str, approved: bool, project_id: str, action
     if step == "scene_review":
         return {"approved": approved}
 
+    if step == "shot_review":
+        return {"approved": approved}
+
     if step == "quality_review":
         return {
             "approved": approved,
@@ -184,12 +187,13 @@ async def _get_first_character_id(project_id: str) -> str:
 
 def _step_label(step: str) -> str:
     return {
+        "character_review": "Duyệt Nhân Vật (Trạm 1)",
+        "shot_review":      "Duyệt Storyboard (Trạm 2)",
+        "seo_review":       "Duyệt Final Master (Trạm 3)",
         "script_review":    "Duyệt Kịch Bản",
-        "character_review": "Duyệt Nhân Vật",
         "scene_review":     "Duyệt Phân Cảnh",
         "quality_review":   "Duyệt Chất Lượng",
         "video_review":     "Duyệt Video Final",
-        "seo_review":       "Duyệt Gói SEO",
     }.get(step, step)
 
 

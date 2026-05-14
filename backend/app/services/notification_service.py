@@ -81,12 +81,14 @@ async def _send_telegram(text: str, buttons: list[dict]) -> None:
 # Buttons use MSO VML (Outlook) + standard <a> fallback for modern clients.
 
 _STEP_LABELS = {
+    "character_review": "Duyệt Nhân Vật (Trạm 1)",
+    "shot_review":      "Duyệt Storyboard (Trạm 2)",
+    "seo_review":       "Duyệt Final Master (Trạm 3)",
+    # Legacy (kept for backwards compat)
     "script_review":    "Duyệt Kịch Bản",
-    "character_review": "Duyệt Nhân Vật",
     "scene_review":     "Duyệt Phân Cảnh",
     "quality_review":   "Duyệt Chất Lượng Video",
     "video_review":     "Duyệt Video Final",
-    "seo_review":       "Duyệt Gói SEO",
 }
 
 _FONT = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
@@ -532,6 +534,121 @@ async def send_seo_review_request(
             {"text": "✅ Chọn A", "url": approve_a_url},
             {"text": "🔶 Chọn B", "url": approve_b_url},
             {"text": "✏️ Viết lại", "url": redo_url},
+        ],
+    )
+
+
+def _build_shot_review_html(
+    project_title: str,
+    shots: list[dict],
+    approve_url: str,
+    reject_url: str,
+) -> str:
+    """Trạm 2 email — shot list preview + 2-button approve/reject."""
+    shot_count = len(shots)
+    preview_shots = shots[:5]
+
+    shot_rows = ""
+    for i, shot in enumerate(preview_shots, 1):
+        shot_id = shot.get("shot_id", f"Shot {i}")
+        duration = shot.get("duration", 0)
+        prompt = (shot.get("prompt") or "")[:120].replace("<", "&lt;").replace(">", "&gt;")
+        qc = shot.get("qc_score")
+        qc_html = (
+            f'<span style="color:{"#16a34a" if qc and qc >= 8 else "#d97706"};font-weight:600;">QC:{qc}</span>'
+            if qc else ""
+        )
+        shot_rows += f"""
+<tr>
+  <td style="padding:8px 12px;border-bottom:1px solid {_BORDER};">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td style="{_FONT};font-size:11px;font-weight:600;color:{_MUTED};width:70px;">{shot_id}</td>
+        <td style="{_FONT};font-size:11px;color:{_MUTED};width:30px;">{duration}s</td>
+        <td style="{_FONT};font-size:12px;color:{_TEXT};">{prompt}{'...' if len(shot.get('prompt',''))>120 else ''}</td>
+        <td align="right" style="width:40px;">{qc_html}</td>
+      </tr>
+    </table>
+  </td>
+</tr>"""
+
+    more_note = ""
+    if shot_count > 5:
+        more_note = f'<tr><td style="padding:8px 12px;{_FONT};font-size:12px;color:{_MUTED};">... và {shot_count - 5} shots nữa — xem đầy đủ trên dashboard.</td></tr>'
+
+    shot_table = f"""
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="border:1px solid {_BORDER};border-radius:6px;margin-bottom:24px;">
+  <tr>
+    <td style="padding:8px 12px;background:#f4f4f5;border-radius:6px 6px 0 0;
+      border-bottom:1px solid {_BORDER};">
+      <p style="margin:0;{_FONT};font-size:11px;font-weight:600;color:{_MUTED};
+        text-transform:uppercase;letter-spacing:0.06em;">{shot_count} Shots ≤8s — Cinematic Decomposer</p>
+    </td>
+  </tr>
+  {shot_rows}
+  {more_note}
+</table>"""
+
+    info = _info_row("Dự án", project_title, f"{shot_count} shots · Xem xét trước khi bắt đầu render video")
+    buttons = f"""
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+  style="margin-bottom:28px;">
+  <tr>
+    <td width="48%" align="center">
+      {_vml_btn(approve_url, "Duyet — Bat dau Render", "#16a34a", 220)}
+    </td>
+    <td width="4%"></td>
+    <td width="48%" align="center">
+      {_vml_btn(reject_url, "Phan canh lai", "#dc2626", 220)}
+    </td>
+  </tr>
+</table>"""
+    footer = (
+        f'Link hết hạn sau <strong>48 giờ</strong> &middot; Chỉ dùng được 1 lần.<br>'
+        f'<a href="{approve_url}" style="color:#16a34a;word-break:break-all;">Duyệt</a> &nbsp;|&nbsp; '
+        f'<a href="{reject_url}" style="color:#dc2626;word-break:break-all;">Phân cảnh lại</a>'
+    )
+    return _base_template(
+        preheader=f"Storyboard {shot_count} shots sẵn sàng — duyệt trước khi render",
+        headline="Duyệt Storyboard & Shot List",
+        subhead="Kiểm tra danh sách shots 8s trước khi bắt đầu render video hàng loạt.",
+        body_rows=info + shot_table + buttons,
+        footer_lines=footer,
+    )
+
+
+async def send_shot_review_request(
+    project_id: str,
+    project_title: str,
+    shots: list[dict],
+) -> None:
+    """Trạm 2 email: shot list preview + Approve/Reject buttons."""
+    token_approve = await create_approval_token(project_id, "shot_review")
+    token_reject  = await create_approval_token(project_id, "shot_review")
+
+    approve_url = _approval_url(token_approve, "approve")
+    reject_url  = _approval_url(token_reject,  "reject")
+
+    logger.info("-" * 60)
+    logger.info("SHOT REVIEW (Trạm 2): project=%s shots=%d", project_id, len(shots))
+    logger.info("APPROVE: %s", approve_url)
+    logger.info("REJECT:  %s", reject_url)
+    logger.info("-" * 60)
+
+    subject   = f"[AI Content Factory] Duyệt Storyboard — {project_title}"
+    html_body = _build_shot_review_html(project_title, shots, approve_url, reject_url)
+    to        = settings.notification_email
+
+    sent = await send_email_resend(to, subject, html_body)
+    if not sent:
+        logger.warning("Resend not configured — shot review URLs logged above.")
+
+    await _send_telegram(
+        f"🎬 <b>Trạm 2 — Duyệt Storyboard</b>\nDự án: <b>{project_title}</b>\n{len(shots)} shots sẵn sàng.",
+        [
+            {"text": "✅ Duyệt — Render", "url": approve_url},
+            {"text": "🔄 Phân cảnh lại",  "url": reject_url},
         ],
     )
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { CheckCircle2, XCircle, ArrowLeft, ArrowRight, Play, Loader2, Sparkles, RefreshCw, AlertCircle } from "lucide-react";
+import { CheckCircle2, ArrowLeft, ArrowRight, Play, Loader2, Sparkles, RefreshCw, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSSE } from "@/hooks/useSSE";
 import { useWizardStore } from "@/stores/wizardStore";
@@ -53,46 +53,52 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
   const [score, setScore] = useState<ScoreData | null>(null);
   const [techAudit, setTechAudit] = useState<TechAudit | null>(null);
   const [scoring, setScoring] = useState(false);
-  const [decision, setDecision] = useState<boolean | null>(null);
-  const [rejectNote, setRejectNote] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [seoStarted, setSeoStarted] = useState(false);
 
-  // Load existing score on mount
   useEffect(() => {
     if (!projectId) return;
     fetch(`${BASE}/quality/${projectId}`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
         if (data && data.overall_score !== undefined) {
           setScore(data);
           setVideoUrl(data.video_url ?? null);
-          if (data.human_approved !== null) setDecision(data.human_approved);
         }
       })
       .catch(() => {});
-    // Load technical audit from pipeline state
     fetch(`${BASE}/pipeline/${projectId}/state`)
-      .then((r) => r.ok ? r.json() : null)
-      .then((st) => { if (st?.video_tech_audit) setTechAudit(st.video_tech_audit); })
+      .then(r => r.ok ? r.json() : null)
+      .then(st => {
+        if (st?.video_tech_audit) setTechAudit(st.video_tech_audit);
+        // If already past video_validator, show "Tiếp theo" as active
+        if (
+          st?.current_stage === "seo_agent" ||
+          st?.current_stage === "seo_review" ||
+          st?.paused_at === "seo_review" ||
+          st?.status === "completed"
+        ) {
+          setSeoStarted(true);
+        }
+      })
       .catch(() => {});
   }, [projectId]);
 
-  // SSE handler — listen for quality_scored event
-  useSSE(scoring ? projectId : null, useCallback((event: { type: string; overall_score?: number; scores?: Record<string, number>; passed?: boolean; score_id?: string; message?: string }) => {
-    if (event.type === "quality_scored") {
+  // SSE: listen for video_validator done (auto-routes to seo_agent)
+  useSSE(projectId, useCallback((event: { type: string; agent?: string; overall_score?: number; scores?: Record<string, number>; passed?: boolean; score_id?: string; message?: string }) => {
+    if (event.type === "agent_done" && event.agent === "video_validator") {
       setScoring(false);
       if (projectId) {
         fetch(`${BASE}/quality/${projectId}`)
-          .then((r) => r.ok ? r.json() : null)
-          .then((data) => {
-            if (data) {
-              setScore(data);
-              setVideoUrl(data.video_url ?? null);
-            }
+          .then(r => r.ok ? r.json() : null)
+          .then(data => {
+            if (data) { setScore(data); setVideoUrl(data.video_url ?? null); }
           })
           .catch(() => {});
       }
+    }
+    if (event.type === "agent_start" && event.agent === "seo_agent") {
+      setSeoStarted(true);
     }
   }, [projectId]));
 
@@ -105,24 +111,6 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ project_id: projectId }),
     }).catch(() => setScoring(false));
-  }
-
-  async function handleSubmitDecision() {
-    if (!projectId || decision === null) return;
-    setSubmitting(true);
-    try {
-      await fetch(`${BASE}/quality/${projectId}/review`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          approved: decision,
-          rejection_notes: !decision ? rejectNote : "",
-        }),
-      });
-      if (decision) onNext();
-    } finally {
-      setSubmitting(false);
-    }
   }
 
   const scoreColor = (overall: number) =>
@@ -141,9 +129,9 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-xl font-bold">Duyệt chất lượng video</h2>
+          <h2 className="text-xl font-bold">Kiểm tra chất lượng video</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            GPT-5.4 Vision chấm điểm 7 tiêu chí — xem kết quả và duyệt
+            AI chấm điểm 7 tiêu chí + kiểm tra kỹ thuật — tự động tiếp tục sang SEO
           </p>
         </div>
         <button
@@ -157,6 +145,17 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
           {score ? "Chấm lại" : "Chấm điểm"}
         </button>
       </div>
+
+      {/* Auto-advance notice when seo_agent started */}
+      {seoStarted && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 p-4 flex items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
+          <div>
+            <p className="text-sm font-semibold text-green-700 dark:text-green-400">Video đã vượt qua kiểm tra ✓</p>
+            <p className="text-xs text-muted-foreground mt-0.5">SEO Agent đang tạo gói metadata — tiến tới Trạm 3</p>
+          </div>
+        </div>
+      )}
 
       {/* Technical audit panel */}
       {techAudit && !techAudit.error && (
@@ -190,7 +189,7 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
             <>
               <Loader2 className="h-10 w-10 animate-spin text-primary/50" />
               <div>
-                <p className="font-medium text-sm">GPT-5.4 Vision đang phân tích...</p>
+                <p className="font-medium text-sm">AI đang phân tích video...</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   Đang trích xuất keyframes và chấm 7 tiêu chí
                 </p>
@@ -202,15 +201,9 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
               <div>
                 <p className="font-medium text-sm">Chưa có điểm chất lượng</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Nhấn "Chấm điểm" để GPT-5.4 Vision phân tích video
+                  Video đang được tạo — điểm sẽ hiện tự động sau khi xong
                 </p>
               </div>
-              <button
-                onClick={handleTriggerScore}
-                className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                <Sparkles className="h-4 w-4" /> Chấm điểm ngay
-              </button>
             </>
           )}
         </div>
@@ -231,13 +224,12 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
               )}
             </div>
             <p className="text-[10px] text-center text-muted-foreground">
-              Được chấm bởi: {score.model_used}
+              Chấm bởi: {score.model_used}
             </p>
           </div>
 
           {/* Score panel */}
           <div className="space-y-4">
-            {/* Overall */}
             <div className={cn(
               "flex items-center gap-4 rounded-xl border p-4",
               score.passed ? "border-green-500/40 bg-green-500/5" : "border-amber-500/40 bg-amber-500/5"
@@ -248,9 +240,9 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
               <div>
                 <p className="text-sm font-bold">/ 100 điểm</p>
                 {score.passed ? (
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">✓ Đạt ngưỡng duyệt (≥ 75)</p>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-0.5">✓ Đạt ngưỡng (≥ 75) — Tự động tiếp tục SEO</p>
                 ) : (
-                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">⚠ Chưa đạt (cần ≥ 75)</p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5">⚠ Chưa đạt (cần ≥ 75) — Đang retry...</p>
                 )}
               </div>
             </div>
@@ -277,75 +269,22 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
               })}
             </div>
 
-            {/* AI Feedback */}
             {score.gpt_feedback && (
               <div className="rounded-lg border border-border bg-muted/40 p-3">
-                <p className="text-[11px] font-semibold text-muted-foreground mb-1">
-                  Nhận xét GPT-5.4
-                </p>
-                <p className="text-xs leading-relaxed text-foreground/80">
-                  {score.gpt_feedback}
-                </p>
+                <p className="text-[11px] font-semibold text-muted-foreground mb-1">Nhận xét AI</p>
+                <p className="text-xs leading-relaxed text-foreground/80">{score.gpt_feedback}</p>
               </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Human approval gate */}
-      {score && (
-        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-          <p className="text-sm font-semibold">Quyết định của bạn</p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => setDecision(true)}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-2 rounded-lg border-2 py-3 text-sm font-medium transition-all",
-                decision === true
-                  ? "border-green-500 bg-green-500/10 text-green-600 dark:text-green-400"
-                  : "border-border hover:border-green-500/50"
-              )}
-            >
-              <CheckCircle2 className="h-4 w-4" /> Duyệt — Tiếp tục SEO
-            </button>
-            <button
-              onClick={() => setDecision(false)}
-              className={cn(
-                "flex flex-1 items-center justify-center gap-2 rounded-lg border-2 py-3 text-sm font-medium transition-all",
-                decision === false
-                  ? "border-destructive bg-destructive/10 text-destructive"
-                  : "border-border hover:border-destructive/50"
-              )}
-            >
-              <XCircle className="h-4 w-4" /> Từ chối — Tạo lại
-            </button>
-          </div>
-          {decision === false && (
-            <textarea
-              value={rejectNote}
-              onChange={(e) => setRejectNote(e.target.value)}
-              placeholder="Ghi chú: phần nào cần cải thiện? (vd: clip cảnh 3 nhân vật không nhất quán)"
-              rows={3}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
-            />
-          )}
-          {decision !== null && (
-            <button
-              onClick={handleSubmitDecision}
-              disabled={submitting}
-              className={cn(
-                "flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold text-white transition-colors",
-                decision ? "bg-green-600 hover:bg-green-700" : "bg-destructive hover:bg-destructive/90"
-              )}
-            >
-              {submitting
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : decision
-                  ? <CheckCircle2 className="h-4 w-4" />
-                  : <XCircle className="h-4 w-4" />}
-              {decision ? "Xác nhận duyệt" : "Xác nhận từ chối"}
-            </button>
-          )}
+      {/* Informational notice — no human approval needed */}
+      {score && !seoStarted && (
+        <div className="rounded-xl border border-border bg-muted/30 p-4 text-center">
+          <p className="text-xs text-muted-foreground">
+            Không cần duyệt thủ công — pipeline tự động tiếp tục sang Trạm 3 (SEO + Xuất bản).
+          </p>
         </div>
       )}
 
@@ -355,10 +294,10 @@ export default function StepQualityReview({ onNext, onBack }: StepProps) {
         </button>
         <button
           onClick={onNext}
-          disabled={decision !== true}
+          disabled={!score && !seoStarted}
           className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
         >
-          Tạo gói SEO <ArrowRight className="h-4 w-4" />
+          Tới Trạm 3 — SEO <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>

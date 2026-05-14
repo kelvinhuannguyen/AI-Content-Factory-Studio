@@ -1,12 +1,9 @@
-"""Agent Video Validator — AI quality scoring + 3-action human review."""
+"""Agent Video Validator — AI quality scoring. No human interrupt — auto-routes to seo_agent."""
 from __future__ import annotations
 import uuid
 import logging
 
-from langgraph.types import interrupt
-
 from ...database import AsyncSessionLocal
-from ...models.project import Project
 from ...models.quality_score import QualityScore
 from ...services.sse_service import publish_event
 from ..state import ProductionState
@@ -179,74 +176,9 @@ async def _save_quality_score(project_id: uuid.UUID, scores: dict, overall: int)
 
 
 def route_after_video_validator(state: ProductionState) -> str:
-    """score < 8 AND retry < 3 → video_editor (auto-retry); else → video_review."""
+    """score < 8 AND retry < 3 → video_editor (auto-retry); else → seo_agent (no human gate)."""
     score = state.get("video_ai_score", 8) or 8
     retries = state.get("video_retry_count", 0)
     if score < 8 and retries < 3:
         return "video_editor"
-    return "video_review"
-
-
-async def video_review_node(state: ProductionState) -> dict:
-    """
-    Human Video Review (3-action interrupt):
-    - Sends Resend email with Proceed / Remake / Hold buttons
-    - interrupt() pauses graph
-    - Resumes with {"action": "proceed"|"remake"|"hold"}
-    """
-    project_id = state["project_id"]
-    ai_score = state.get("video_ai_score", 8) or 8
-    overall_score = (ai_score or 8) * 10
-
-    await publish_event(project_id, {
-        "type": "agent_interrupt",
-        "step": "video_review",
-        "video_ai_score": ai_score,
-        "overall_score": overall_score,
-        "message": f"Video đạt {overall_score}/100 điểm. Đã gửi email duyệt.",
-    })
-
-    # Fetch project title
-    project_title = "Dự án mới"
-    try:
-        pid = uuid.UUID(project_id)
-        async with AsyncSessionLocal() as db:
-            proj = await db.get(Project, pid)
-            if proj:
-                project_title = proj.title or "Dự án mới"
-    except Exception:
-        pass
-
-    # Send 3-action email
-    try:
-        from ...services.notification_service import send_video_review_request
-        await send_video_review_request(
-            project_id=project_id,
-            project_title=project_title,
-            ai_score=ai_score,
-            overall_score=overall_score,
-        )
-    except Exception as e:
-        logger.warning("Video review email failed: %s", e)
-
-    decision: dict = interrupt({
-        "step": "video_review",
-        "video_ai_score": ai_score,
-        "overall_score": overall_score,
-    })
-
-    action: str = decision.get("action", "proceed")
-
-    return {
-        "video_review_action": action,
-        "approval_status": "approved" if action == "proceed" else "pending",
-        "current_stage": "done" if action in ("proceed", "hold") else "video_editor",
-    }
-
-
-def route_after_video_review(state: ProductionState) -> str:
-    """proceed/hold → END; remake → video_editor (reset retry counter)."""
-    action = state.get("video_review_action", "proceed")
-    if action == "remake":
-        return "video_editor"
-    return "end"
+    return "seo_agent"

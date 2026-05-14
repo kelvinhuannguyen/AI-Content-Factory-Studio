@@ -1,12 +1,9 @@
-"""Agent Scene Planner — phân cảnh từ kịch bản + điểm dừng duyệt cảnh."""
+"""Agent Scene Planner — phân cảnh từ kịch bản. Không có interrupt — auto-advance."""
 from __future__ import annotations
 import logging
 import uuid
 
-from langgraph.types import interrupt
-
 from ...services.sse_service import publish_event
-from ...services.notification_service import send_approval_request
 from ..state import ProductionState
 
 logger = logging.getLogger(__name__)
@@ -104,20 +101,13 @@ async def scene_planner_node(state: ProductionState) -> dict:
 
 
 async def scene_review_node(state: ProductionState) -> dict:
-    """
-    Điểm dừng duyệt cảnh:
-    - Nếu scenes=[] (scene_planner bị lỗi) → tự động retry, không gửi email
-    - Gửi email với số cảnh + tổng thời lượng
-    - Duyệt → bắt đầu tạo video
-    - Từ chối → phân cảnh lại
-    """
-    project_id = state["project_id"]
+    """Auto-approve: no interrupt. Scenes pass directly to cinematic_decomposer."""
     scenes = state.get("scenes", [])
-    n = len(scenes)
+    project_id = state["project_id"]
 
-    # Auto-retry if scene_planner failed (no scenes) instead of prompting user
-    if n == 0:
-        logger.warning("scene_review: no scenes available — sending back to scene_planner")
+    # Auto-retry if scene_planner failed
+    if not scenes:
+        logger.warning("scene_review: no scenes — retrying scene_planner")
         await publish_event(project_id, {
             "type": "agent_start",
             "agent": "scene_planner",
@@ -125,48 +115,10 @@ async def scene_review_node(state: ProductionState) -> dict:
         })
         return {"approval_status": "rejected", "current_stage": "scene_planner"}
 
-    total_s = sum(s.get("duration_seconds", 0) for s in scenes)
-
-    await publish_event(project_id, {
-        "type": "agent_interrupt",
-        "step": "scene_review",
-        "scenes": scenes,
-        "message": f"Da phan {n} canh ({total_s}s). Da gui email duyet.",
-    })
-
-    # Lấy project title
-    project_title = "Du an moi"
-    try:
-        pid = uuid.UUID(project_id)
-        from ...database import AsyncSessionLocal
-        from ...models.project import Project
-        async with AsyncSessionLocal() as db:
-            proj = await db.get(Project, pid)
-            if proj:
-                project_title = proj.title or "Du an moi"
-    except Exception:
-        pass
-
-    extra = f"{n} canh · Tong {total_s}s · Duyet de bat dau tao video (Kling-3-Pro + ElevenLabs)"
-    try:
-        await send_approval_request(
-            project_id=project_id,
-            project_title=project_title,
-            step="scene_review",
-            extra_info=extra,
-        )
-    except Exception as e:
-        logger.warning("Email notification failed (scene_review): %s", e)
-
-    decision: dict = interrupt({
-        "step": "scene_review",
-        "scenes": scenes,
-    })
-
-    approved: bool = decision.get("approved", False)
     return {
-        "approval_status": "approved" if approved else "rejected",
-        "current_stage": "video_editor" if approved else "scene_planner",
+        "approval_status": "approved",
+        "current_stage": "cinematic_decomposer",
+        "paused_at": None,
     }
 
 
