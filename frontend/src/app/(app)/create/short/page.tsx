@@ -19,8 +19,10 @@ const STEP_COMPONENTS = [
   StepSEO, StepPublish,
 ];
 
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+
 export default function ShortVideoWizard() {
-  const { stepIndex, nextStep, prevStep, project, setProject } = useWizardStore();
+  const { stepIndex, nextStep, prevStep, project, setProject, reset } = useWizardStore();
 
   const currentStep = SHORT_VIDEO_STEPS[stepIndex] ?? SHORT_VIDEO_STEPS[0];
   const StepComponent = STEP_COMPONENTS[stepIndex] ?? StepTopic;
@@ -35,11 +37,19 @@ export default function ShortVideoWizard() {
     isLast: stepIndex === SHORT_VIDEO_STEPS.length - 1,
   };
 
+  async function handleReset() {
+    if (project?.id) {
+      await fetch(`${BASE}/pipeline/${project.id}/reset`, { method: "DELETE" }).catch(() => {});
+    }
+    reset();
+  }
+
   return (
     <WizardShell
       steps={SHORT_VIDEO_STEPS}
       currentStepId={currentStep.id}
       title="Video ngắn"
+      onReset={handleReset}
     >
       <StepComponent {...stepProps} />
     </WizardShell>
