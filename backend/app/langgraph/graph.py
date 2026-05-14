@@ -1,9 +1,10 @@
-"""LangGraph StateGraph — 11 nodes, 5 interrupt points.
+"""LangGraph StateGraph — 12 nodes, 5 interrupt points.
 
 Graph flow:
   screenwriter → script_scorer → script_review(INTERRUPT) → character_designer
     ↑ retry < 8/10                ↑ human reject loops back
-  → character_review(INTERRUPT) → scene_planner → scene_review(INTERRUPT)
+  → character_scorer → character_review(INTERRUPT) → scene_planner → scene_review(INTERRUPT)
+     ↑ AI retry < 8/10   ↑ human reject loops back to character_designer
   → video_editor → video_validator → video_review(INTERRUPT) → END
      ↑ AI retry < 8/10  ↑ remake loops back
 """
@@ -25,6 +26,10 @@ from .nodes.character_designer import (
     character_designer_node,
     character_review_node,
     route_after_character_review,
+)
+from .nodes.character_scorer import (
+    character_scorer_node,
+    route_after_character_scorer,
 )
 from .nodes.scene_planner import (
     scene_planner_node,
@@ -52,6 +57,7 @@ def _build_graph():
     builder.add_node("script_scorer",      script_scorer_node)
     builder.add_node("script_review",      script_review_node)
     builder.add_node("character_designer", character_designer_node)
+    builder.add_node("character_scorer",   character_scorer_node)
     builder.add_node("character_review",   character_review_node)
     builder.add_node("scene_planner",      scene_planner_node)
     builder.add_node("scene_review",       scene_review_node)
@@ -76,7 +82,12 @@ def _build_graph():
     )
 
     # ── Character flow ────────────────────────────────────────────────────
-    builder.add_edge("character_designer", "character_review")
+    builder.add_edge("character_designer", "character_scorer")
+    builder.add_conditional_edges(
+        "character_scorer",
+        route_after_character_scorer,
+        {"character_designer": "character_designer", "character_review": "character_review"},
+    )
     builder.add_conditional_edges(
         "character_review",
         route_after_character_review,
@@ -114,5 +125,5 @@ async def get_graph():
         from .checkpointer import get_checkpointer
         checkpointer = await get_checkpointer()
         _graph = _build_graph().compile(checkpointer=checkpointer)
-        logger.info("LangGraph compiled: 10 nodes, 5 interrupt points")
+        logger.info("LangGraph compiled: 12 nodes, 5 interrupt points")
     return _graph

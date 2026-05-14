@@ -37,3 +37,7 @@ class Character(UUIDBase):
     color_palette: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     sheet_r2_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     user_prompt_addition: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Character Scorer fields (migration 004)
+    ai_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    correction_brief: Mapped[str | None] = mapped_column(Text, nullable=True)

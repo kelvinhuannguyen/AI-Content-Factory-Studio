@@ -42,6 +42,9 @@ class ProductionState(TypedDict):
     # ── AI Scoring + Auto-Retry ───────────────────────────────────────────
     script_ai_score: Optional[int]   # 1-10, from script_scorer_node
     script_retry_count: int          # auto-increments on screenwriter retry
+    character_ai_score: Optional[int]   # 1-10, from character_scorer_node (min across all chars)
+    character_retry_count: int          # auto-increments on character auto-retry
+    character_correction_briefs: Optional[dict]  # {ref_id: correction_brief_text}
     video_ai_score: Optional[int]    # 1-10, from video_validator_node
     video_retry_count: int           # auto-increments on video_editor retry
     video_review_action: Optional[str]  # "proceed" | "remake" | "hold"
@@ -98,6 +101,9 @@ def initial_state(
         # AI Scoring + Auto-Retry
         script_ai_score=None,
         script_retry_count=0,
+        character_ai_score=None,
+        character_retry_count=0,
+        character_correction_briefs=None,
         video_ai_score=None,
         video_retry_count=0,
         video_review_action=None,

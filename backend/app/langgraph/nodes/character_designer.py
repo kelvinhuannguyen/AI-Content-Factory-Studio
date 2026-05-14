@@ -30,25 +30,55 @@ async def character_designer_node(state: ProductionState) -> dict:
     IP Character Production Pipeline:
     1. IP Architect (LLM): parse script → extract N characters with VIS, DNA, Ref IDs
     2. Generate 1 hero portrait per character (concurrent) using VIS-anchored prompts
-    3. Return all characters to character_review_node
+    3. Return all characters to character_scorer_node
+
+    On re-entry from character_scorer (score < 8):
+    - Only regenerates characters with correction_briefs (failing ones)
+    - Increments character_retry_count
     """
     project_id = state["project_id"]
     script_content = state.get("script_content") or ""
+    correction_briefs = state.get("character_correction_briefs") or {}
+    retry_count = state.get("character_retry_count", 0)
 
-    await publish_event(project_id, {
-        "type": "agent_start",
-        "agent": "character_designer",
-        "message": "Đang phân tích kịch bản để thiết kế nhân vật...",
-    })
+    is_retry = bool(correction_briefs) and retry_count > 0
 
-    # Stage 1-4: IP Pipeline
-    from .character_ip_pipeline import _run_ip_pipeline, _build_fallback_profile
+    if is_retry:
+        # Re-entry from character_scorer: only regenerate failing characters
+        await publish_event(project_id, {
+            "type": "agent_start",
+            "agent": "character_designer",
+            "message": f"Tạo lại {len(correction_briefs)} nhân vật chưa đạt (lần {retry_count + 1})...",
+        })
 
-    if script_content:
-        try:
-            ip_result = await _run_ip_pipeline(state, script_content)
-        except Exception as e:
-            logger.error("IP pipeline failed, using fallback: %s", e)
+        profiles = state.get("character_profiles") or []
+        character_vis_map = state.get("character_vis_map") or {}
+        await _regenerate_failing_characters(project_id, correction_briefs, profiles)
+
+    else:
+        # First run: full IP Architect + generation
+        await publish_event(project_id, {
+            "type": "agent_start",
+            "agent": "character_designer",
+            "message": "Đang phân tích kịch bản để thiết kế nhân vật...",
+        })
+
+        from .character_ip_pipeline import _run_ip_pipeline, _build_fallback_profile
+
+        if script_content:
+            try:
+                ip_result = await _run_ip_pipeline(state, script_content)
+            except Exception as e:
+                logger.error("IP pipeline failed, using fallback: %s", e)
+                main = _build_fallback_profile(
+                    state.get("character_name") or "",
+                    state.get("character_description") or "",
+                )
+                ip_result = {
+                    "character_profiles": [main],
+                    "character_vis_map": {"#CHAR_01": main["visual_identity_string"]},
+                }
+        else:
             main = _build_fallback_profile(
                 state.get("character_name") or "",
                 state.get("character_description") or "",
@@ -56,46 +86,31 @@ async def character_designer_node(state: ProductionState) -> dict:
             ip_result = {
                 "character_profiles": [main],
                 "character_vis_map": {"#CHAR_01": main["visual_identity_string"]},
-                "main_profile": main,
-                "supporting_profiles": [],
             }
-    else:
-        # No script yet — use user hints
-        main = _build_fallback_profile(
-            state.get("character_name") or "",
-            state.get("character_description") or "",
-        )
-        ip_result = {
-            "character_profiles": [main],
-            "character_vis_map": {"#CHAR_01": main["visual_identity_string"]},
-            "main_profile": main,
-            "supporting_profiles": [],
-        }
 
-    profiles = ip_result["character_profiles"]
-    character_vis_map = ip_result["character_vis_map"]
+        profiles = ip_result["character_profiles"]
+        character_vis_map = ip_result["character_vis_map"]
 
-    await publish_event(project_id, {
-        "type": "agent_start",
-        "agent": "character_designer",
-        "character_count": len(profiles),
-        "message": f"Xác định {len(profiles)} nhân vật — đang tạo ảnh...",
-    })
+        await publish_event(project_id, {
+            "type": "agent_start",
+            "agent": "character_designer",
+            "character_count": len(profiles),
+            "message": f"Xác định {len(profiles)} nhân vật — đang tạo ảnh...",
+        })
 
-    # Stage 5: Delete old characters, generate new ones concurrently
-    from sqlalchemy import delete
-    async with AsyncSessionLocal() as db:
-        await db.execute(delete(Character).where(Character.project_id == uuid.UUID(project_id)))
-        await db.commit()
+        # Delete old characters, generate new ones concurrently
+        from sqlalchemy import delete
+        async with AsyncSessionLocal() as db:
+            await db.execute(delete(Character).where(Character.project_id == uuid.UUID(project_id)))
+            await db.commit()
 
-    from ...tasks.character_tasks import _generate_character_image_async
-    if profiles:
-        await asyncio.gather(*[
-            _generate_character_image_async(project_id, p) for p in profiles
-        ])
-    else:
-        # 0 characters (narration-only script) — skip generation
-        logger.info("No characters found in script — narration-only video")
+        from ...tasks.character_tasks import _generate_character_image_async
+        if profiles:
+            await asyncio.gather(*[
+                _generate_character_image_async(project_id, p) for p in profiles
+            ])
+        else:
+            logger.info("No characters found in script — narration-only video")
 
     from ...tasks.character_tasks import _load_characters
     characters = await _load_characters(project_id)
@@ -104,18 +119,59 @@ async def character_designer_node(state: ProductionState) -> dict:
         "type": "agent_done",
         "agent": "character_designer",
         "character_count": len(characters),
-        "message": f"Đã thiết kế {len(characters)} nhân vật. Kiểm tra và duyệt.",
+        "message": f"Đã thiết kế {len(characters)} nhân vật. Đang kiểm tra chất lượng...",
     })
 
     return {
-        "extracted_characters": profiles,
-        "character_profiles": profiles,
-        "character_vis_map": character_vis_map,
+        "extracted_characters": profiles if not is_retry else state.get("extracted_characters"),
+        "character_profiles": profiles if not is_retry else state.get("character_profiles"),
+        "character_vis_map": character_vis_map if not is_retry else state.get("character_vis_map", {}),
         "character_count": len(characters),
         "characters": characters,
+        "character_retry_count": retry_count + 1 if is_retry else 0,
+        "character_correction_briefs": None,  # clear briefs — scorer will set new ones if needed
         "error": None,
-        "current_stage": "character_review",
+        "current_stage": "character_designer",
     }
+
+
+async def _regenerate_failing_characters(
+    project_id: str,
+    correction_briefs: dict,
+    profiles: list,
+) -> None:
+    """Only regenerate characters that failed the scorer's quality check."""
+    from sqlalchemy import delete
+    from ...database import AsyncSessionLocal
+    from ...models.character import Character
+    from ...tasks.character_tasks import _generate_character_image_async
+
+    tasks = []
+    for profile in profiles:
+        ref_id = profile.get("ref_id", "")
+        if ref_id in correction_briefs:
+            correction = correction_briefs[ref_id]
+            logger.info("Regenerating %s with correction: %s", ref_id, correction[:80])
+
+            # Delete old character row for this ref_id
+            pid = uuid.UUID(project_id)
+            async with AsyncSessionLocal() as db:
+                await db.execute(
+                    delete(Character).where(
+                        Character.project_id == pid,
+                        Character.ref_id == ref_id,
+                    )
+                )
+                await db.commit()
+
+            tasks.append(_generate_character_image_async(
+                project_id,
+                profile,
+                user_prompt_addition=correction,
+            ))
+
+    if tasks:
+        await asyncio.gather(*tasks)
 
 
 async def character_review_node(state: ProductionState) -> dict:

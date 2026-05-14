@@ -13,6 +13,7 @@ type Phase =
   | "waiting"       // LangGraph chưa trigger character_designer
   | "analyzing"     // IP Architect đang đọc kịch bản
   | "generating"    // Đang tạo ảnh
+  | "reviewing"     // Reviewer Agent đang kiểm tra chất lượng
   | "ready"         // Tất cả nhân vật ready, chờ duyệt
   | "approving"
   | "already_done"; // Nhân vật đã duyệt, pipeline tiếp tục
@@ -126,6 +127,10 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
       }
     }
 
+    if (type === "agent_start" && agent === "character_scorer") {
+      setPhase("reviewing");
+    }
+
     if (type === "character_progress") {
       const refId: string = event.ref_id ?? `#CHAR_0${(event.character_index ?? 0) + 1}`;
       setCharacters((prev) => {
@@ -171,6 +176,23 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
 
     if (type === "agent_done" && agent === "character_designer") {
       loadCharacters();
+    }
+
+    // Reviewer Agent scoring result
+    if (type === "agent_done" && agent === "character_scorer") {
+      if (event.will_retry) {
+        // Score < 8 → auto-retry: reset failing characters to "generating"
+        const briefs: Record<string, string> = event.correction_briefs ?? {};
+        if (Object.keys(briefs).length > 0) {
+          setCharacters((prev) => prev.map((c) =>
+            briefs[c.ref_id] !== undefined
+              ? { ...c, status: "generating", image_url: null }
+              : c
+          ));
+        }
+        setPhase("generating");
+      }
+      // If not retrying: character_review interrupt will fire next → stays in generating until then
     }
 
     if (type === "agent_interrupt" && step === "character_review") {
@@ -261,26 +283,31 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
         <p className="mt-1 text-sm text-muted-foreground">
           {phase === "waiting" && "Chờ pipeline kích hoạt thiết kế nhân vật..."}
           {phase === "analyzing" && "AI đang phân tích kịch bản để xác định nhân vật..."}
-          {phase === "generating" && `Đang thiết kế ${characters.length > 0 ? characters.length : ""}  nhân vật...`}
+          {phase === "generating" && `Đang thiết kế ${characters.length > 0 ? characters.length : ""} nhân vật...`}
+          {phase === "reviewing" && "Reviewer Agent đang kiểm tra chất lượng (Senior Art Director AI)..."}
           {phase === "ready" && `${characters.length} nhân vật đã sẵn sàng — kiểm tra và duyệt`}
           {phase === "approving" && "Đang gửi xác nhận..."}
           {phase === "already_done" && "Nhân vật đã duyệt — pipeline đang tiếp tục"}
         </p>
       </div>
 
-      {/* Waiting / Analyzing */}
-      {(phase === "waiting" || phase === "analyzing") && (
+      {/* Waiting / Analyzing / Reviewing */}
+      {(phase === "waiting" || phase === "analyzing" || phase === "reviewing") && (
         <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
           <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
           <div>
             <p className="text-sm font-medium text-primary">
               {phase === "analyzing"
                 ? "IP Architect đang phân tích kịch bản..."
+                : phase === "reviewing"
+                ? "Reviewer Agent đang kiểm tra chất lượng..."
                 : "Chờ pipeline kích hoạt..."}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
               {phase === "analyzing"
                 ? "Xác định nhân vật, thiết kế VIS + Physical DNA + Color Palette"
+                : phase === "reviewing"
+                ? "Senior Art Director AI: kiểm tra Character Consistency, Script Fidelity, Technical Quality"
                 : "LangGraph sẽ tự động kích hoạt sau khi kịch bản được duyệt"}
             </p>
           </div>
