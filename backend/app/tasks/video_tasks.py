@@ -74,11 +74,30 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
 
     r2_key = f"projects/{project_id}/clips/{scene_id}/clip.mp4"
     try:
-        # Primary: KymaAPI Hailuo-02-768p
+        # Primary: KymaAPI (hailuo → kling-3-pro internal fallback)
+        video_bytes: bytes | None = None
         try:
             video_bytes = await kyma_gen(video_prompt, duration_seconds=duration_seconds, aspect_ratio=aspect_ratio)
-        except Exception as primary_err:
-            logger.warning("Hailuo failed, trying Veo 3.1 fallback: %s", primary_err)
+        except Exception as kyma_err:
+            logger.warning("KymaAPI video failed, trying Sora-2: %s", kyma_err)
+
+        # Fallback 1: OpenAI Sora-2
+        if video_bytes is None:
+            try:
+                from ..services.sora_video_service import generate_video_clip as sora_gen, SoraError
+                await publish_event(project_id, {
+                    "type": "task_start",
+                    "task_type": "video_clip",
+                    "scene_id": scene_id,
+                    "model_label": "sora-2",
+                    "message": "Đang thử Sora-2 (fallback)...",
+                })
+                video_bytes = await sora_gen(video_prompt, duration_seconds=duration_seconds, aspect_ratio=aspect_ratio)
+            except Exception as sora_err:
+                logger.warning("Sora-2 failed, trying Veo 3.1: %s", sora_err)
+
+        # Fallback 2: Google Veo 3.1 (requires preview access)
+        if video_bytes is None:
             from ..services.veo_video_service import generate_video_clip as veo_gen, VeoVideoError
             await publish_event(project_id, {
                 "type": "task_start",
@@ -88,6 +107,8 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
                 "message": "Đang thử Veo 3.1 (fallback)...",
             })
             video_bytes = await veo_gen(video_prompt, duration_seconds=duration_seconds, aspect_ratio=aspect_ratio)
+        if video_bytes is None:
+            raise Exception("All video providers failed (KymaAPI + Sora + Veo)")
         await upload_bytes(r2_key, video_bytes, content_type="video/mp4")
 
         async with AsyncSessionLocal() as db:
