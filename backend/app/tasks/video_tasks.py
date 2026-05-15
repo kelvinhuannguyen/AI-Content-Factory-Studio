@@ -74,7 +74,20 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
 
     r2_key = f"projects/{project_id}/clips/{scene_id}/clip.mp4"
     try:
-        video_bytes = await kyma_gen(video_prompt, duration_seconds=duration_seconds, aspect_ratio=aspect_ratio)
+        # Primary: KymaAPI Hailuo-02-768p
+        try:
+            video_bytes = await kyma_gen(video_prompt, duration_seconds=duration_seconds, aspect_ratio=aspect_ratio)
+        except Exception as primary_err:
+            logger.warning("Hailuo failed, trying Veo 3.1 fallback: %s", primary_err)
+            from ..services.veo_video_service import generate_video_clip as veo_gen, VeoVideoError
+            await publish_event(project_id, {
+                "type": "task_start",
+                "task_type": "video_clip",
+                "scene_id": scene_id,
+                "model_label": _settings.veo_video_model,
+                "message": "Đang thử Veo 3.1 (fallback)...",
+            })
+            video_bytes = await veo_gen(video_prompt, duration_seconds=duration_seconds, aspect_ratio=aspect_ratio)
         await upload_bytes(r2_key, video_bytes, content_type="video/mp4")
 
         async with AsyncSessionLocal() as db:

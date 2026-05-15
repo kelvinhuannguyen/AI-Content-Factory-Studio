@@ -33,6 +33,10 @@ class Settings(BaseSettings):
     chatfpt_image_api_key: str = ""
     banana_api_key: str = ""
 
+    # Google Gemini / Veo (video fallback)
+    gemini_api_key: str = ""
+    veo_video_model: str = "veo-3.1-fast-generate-preview"  # fast variant for production
+
     # xAI Grok (video generation)
     xai_api_key: str = ""
     xai_video_model: str = "grok-imagine-video"
