@@ -41,10 +41,11 @@ class Settings(BaseSettings):
     xai_api_key: str = ""
     xai_video_model: str = "grok-imagine-video"
 
-    # OpenAI direct (screenwriter + scorer — faster than KymaAPI routing)
+    # OpenAI direct (screenwriter + scorer + image fallback)
     openai_base_url: str = "https://api.openai.com/v1"
     openai_llm_model: str = "gpt-5.4-mini"    # screenwriter — chat model (gpt-5.4 base is completions-only)
     openai_scorer_model: str = "gpt-5.4-nano"  # script scorer — fast + cheap
+    openai_image_model: str = "gpt-image-2"    # character image fallback
 
     # Audio
     elevenlabs_api_key: str = ""

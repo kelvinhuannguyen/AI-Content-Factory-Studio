@@ -3,11 +3,12 @@
 Chain order:
   1. ComfyUI (local X13 or RunPod)
   2. KymaAPI → flux-1.1-ultra (async job)
-  3. Skip further providers (ChatFPT / Banana not yet configured)
+  3. OpenAI → gpt-image-2 (b64_json response)
 
 Returns: PNG bytes
 """
 import asyncio
+import base64
 import logging
 
 import httpx
@@ -96,6 +97,39 @@ async def _download_url(url: str) -> bytes:
     return resp.content
 
 
+async def _openai_generate(prompt: str) -> bytes:
+    """Generate image via OpenAI gpt-image-2 — returns PNG bytes from b64_json."""
+    if not settings.openai_api_key:
+        raise ImageGenError("openai_api_key not configured")
+    headers = {
+        "Authorization": f"Bearer {settings.openai_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": settings.openai_image_model,
+        "prompt": prompt,
+        "n": 1,
+        "size": "1024x1024",
+        "output_format": "png",
+    }
+    async with httpx.AsyncClient(timeout=120) as client:
+        resp = await client.post(
+            f"{settings.openai_base_url}/images/generations",
+            headers=headers,
+            json=payload,
+        )
+    if resp.status_code != 200:
+        raise ImageGenError(f"OpenAI image {resp.status_code}: {resp.text[:200]}")
+    data = resp.json()
+    item = (data.get("data") or [{}])[0]
+    # Response can be b64_json or url
+    if item.get("b64_json"):
+        return base64.b64decode(item["b64_json"])
+    if item.get("url"):
+        return await _download_url(item["url"])
+    raise ImageGenError(f"OpenAI image: no b64_json or url in response: {data}")
+
+
 async def generate_image(
     prompt: str,
     negative_prompt: str = "",
@@ -113,12 +147,20 @@ async def generate_image(
     except ComfyUIError as e:
         logger.warning("ComfyUI failed (variant %d): %s — falling back to KymaAPI", variant_index, e)
 
-    # 2. Try KymaAPI
+    # 2. Try KymaAPI flux-1.1-ultra
     if settings.kymaapi_key:
         try:
             img = await _kymaapi_generate(prompt, negative_prompt=negative_prompt)
             return img, "kymaapi"
         except ImageGenError as e:
-            logger.warning("KymaAPI failed: %s", e)
+            logger.warning("KymaAPI failed: %s — falling back to OpenAI gpt-image-2", e)
+
+    # 3. Try OpenAI gpt-image-2
+    if settings.openai_api_key:
+        try:
+            img = await _openai_generate(prompt)
+            return img, "openai"
+        except ImageGenError as e:
+            logger.warning("OpenAI image failed: %s", e)
 
     raise ImageGenError("All image generation providers failed for variant %d" % variant_index)
