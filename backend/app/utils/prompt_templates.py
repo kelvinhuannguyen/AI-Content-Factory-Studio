@@ -502,17 +502,18 @@ OUTPUT SCHEMA (return exactly this, nothing else):
   "workflow_steps": [
     {
       "clip_id": "<shot_id e.g. SC01_SH01>",
-      "video_prompt": "[CONTINUITY: <one instruction line>] <original prompt verbatim after this>",
+      "video_prompt": "[CONTINUITY: <one instruction line, max 20 words>]",
       "continuity_notes": "<bridge logic + style anchor notes for this shot>",
       "sfx_prompt": "<specific Foley sounds>",
-      "ambience": "<environmental background ≤500 chars>",
+      "ambience": "<environmental background ≤300 chars>",
       "motion_intensity": <integer 0-10>
     }
   ]
 }
 
 GUARDRAILS:
-- video_prompt must be: "[CONTINUITY: <one instruction line>] " prepended to the ORIGINAL prompt verbatim. Do not alter original prompt tokens.
+- video_prompt must contain ONLY the [CONTINUITY: ...] prefix tag — do NOT repeat or copy the original prompt. The system will prepend it automatically.
+- [CONTINUITY: ...] tag must be under 20 words total (everything inside the brackets).
 - continuity_notes for shot n must reference the previous shot_id by name (e.g. "Match #CHAR_01 position from SC01_SH01.").
 - Never invent characters not present in characters_present.
 - motion_intensity must be an integer, never a float.

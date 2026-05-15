@@ -30,6 +30,7 @@ async def generate_bgm(
     duration_seconds: int,
     motion_intensity_avg: float | None = None,
 ) -> bytes:
+    raise BGMError("BGM endpoint not confirmed on KymaAPI — skipping")
     """
     Generate instrumental background music via minimax-music-pro.
     Returns MP3 bytes. Non-fatal — caller should wrap in try/except.

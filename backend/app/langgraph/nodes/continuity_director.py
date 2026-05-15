@@ -65,8 +65,7 @@ async def continuity_director_node(state: ProductionState) -> dict:
             CONTINUITY_DIRECTOR_SYSTEM,
             user_prompt,
             temperature=0.2,
-            # ~100 tokens per shot; raise limit for long projects
-            max_tokens=4096 if len(shots) <= 35 else 8192,
+            max_tokens=8192,
         )
 
         workflow_steps: list[dict] = result.get("workflow_steps") or []
