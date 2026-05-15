@@ -48,8 +48,13 @@ async def generate_video_clip(
         raise SoraError("openai_api_key not configured")
 
     size = _SIZE_MAP.get(aspect_ratio, "1080x1920")
-    # Sora supports 8, 16, 20 seconds — use closest >= requested duration
-    sora_seconds = 8 if duration_seconds <= 8 else (16 if duration_seconds <= 16 else 20)
+    # Sora requires seconds as STRING: '4', '8', or '12'
+    if duration_seconds <= 4:
+        sora_seconds = "4"
+    elif duration_seconds <= 8:
+        sora_seconds = "8"
+    else:
+        sora_seconds = "12"
 
     payload = {
         "model": model,
