@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     chatfpt_image_api_key: str = ""
     banana_api_key: str = ""
 
+    # xAI Grok (video generation)
+    xai_api_key: str = ""
+    xai_video_model: str = "grok-2-aurora"
+
     # Audio
     elevenlabs_api_key: str = ""
     openai_api_key: str = ""
