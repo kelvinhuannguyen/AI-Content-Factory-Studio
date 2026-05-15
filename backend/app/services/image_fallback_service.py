@@ -1,8 +1,8 @@
 """Image generation fallback chain.
 
 Chain order:
-  1. KymaAPI → flux-1.1-ultra (async job)
-  2. OpenAI → gpt-image-2 (b64_json response)
+  1. OpenAI → gpt-image-2 (reliable, high quality)
+  2. KymaAPI → flux-1.1-ultra (fallback)
 
 Returns: PNG bytes
 """
@@ -138,20 +138,20 @@ async def generate_image(
     Generate an image using the fallback chain.
     Returns (image_bytes, provider_used).
     """
-    # 1. Try KymaAPI flux-1.1-ultra
-    if settings.kymaapi_key:
-        try:
-            img = await _kymaapi_generate(prompt, negative_prompt=negative_prompt)
-            return img, "kymaapi"
-        except ImageGenError as e:
-            logger.warning("KymaAPI failed: %s — falling back to OpenAI gpt-image-2", e)
-
-    # 2. Try OpenAI gpt-image-2
+    # 1. OpenAI gpt-image-2 — primary (reliable, high quality, no content filter issues)
     if settings.openai_api_key:
         try:
             img = await _openai_generate(prompt)
             return img, "openai"
         except ImageGenError as e:
-            logger.warning("OpenAI image failed: %s", e)
+            logger.warning("OpenAI gpt-image-2 failed: %s — falling back to KymaAPI", e)
+
+    # 2. KymaAPI flux-1.1-ultra — fallback
+    if settings.kymaapi_key:
+        try:
+            img = await _kymaapi_generate(prompt, negative_prompt=negative_prompt)
+            return img, "kymaapi"
+        except ImageGenError as e:
+            logger.warning("KymaAPI image failed: %s", e)
 
     raise ImageGenError("All image generation providers failed for variant %d" % variant_index)
