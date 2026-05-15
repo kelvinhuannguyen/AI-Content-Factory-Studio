@@ -1,8 +1,10 @@
 """Agent Screenwriter — viết kịch bản Hollywood. Không có interrupt — auto-advance."""
 from __future__ import annotations
+import json
 import uuid
 import logging
 
+from ...config import get_settings
 from ...database import AsyncSessionLocal
 from ...models.script import Script
 from ...models.project import Project, ProjectStatus
@@ -12,6 +14,7 @@ from ...utils.prompt_templates import SCRIPT_SYSTEM, script_user
 from ..state import ProductionState
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 async def _fetch_project_title(project_id: str) -> str:
@@ -79,12 +82,25 @@ async def screenwriter_node(state: ProductionState) -> dict:
         additional_notes=additional_notes,
     )
 
-    try:
-        result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000)
-    except LLMError as e:
-        logger.error("Screenwriter LLM error: %s", e)
-        await publish_event(project_id, {"type": "agent_error", "agent": "screenwriter", "error": str(e)})
-        return {"error": str(e), "current_stage": "screenwriter"}
+    # Primary: deepseek-v3 (better for long-form, mature drama without content filtering)
+    # Fallback: gemini-2.5-flash
+    result: dict | None = None
+    for model in [settings.kymaapi_llm_model_long, settings.kymaapi_llm_model]:
+        try:
+            result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000, model=model)
+            if isinstance(result, dict) and result.get("scenes"):
+                logger.info("Screenwriter success with model=%s", model)
+                break
+            logger.warning("Screenwriter model=%s returned no scenes — trying next", model)
+            result = None
+        except LLMError as e:
+            logger.warning("Screenwriter model=%s failed: %s — trying next", model, e)
+
+    if not result:
+        err = "All screenwriter models failed to produce a valid script"
+        logger.error(err)
+        await publish_event(project_id, {"type": "agent_error", "agent": "screenwriter", "error": err})
+        return {"error": err, "current_stage": "screenwriter"}
 
     full_text: str = result.get("full_script_text", "")
     content_html = _script_to_html(result)
@@ -105,7 +121,9 @@ async def screenwriter_node(state: ProductionState) -> dict:
             script = Script(
                 project_id=pid,
                 version=version,
-                content_raw=full_text,
+                # Store full JSON so _generate_scene_prompts can use scenes directly
+                # without an extra LLM parsing call
+                content_raw=json.dumps(result, ensure_ascii=False),
                 content_html=content_html,
                 word_count=word_count,
                 estimated_duration_seconds=result.get("total_estimated_seconds", state.get("duration_seconds", 60)),
@@ -132,9 +150,15 @@ async def screenwriter_node(state: ProductionState) -> dict:
         "message": f"Kịch bản đã viết xong ({word_count} từ). Vui lòng duyệt.",
     })
 
+    # Build plain-text narration for IP Architect (character extractor)
+    plain_narration = full_text or "\n".join(
+        f"{s.get('narration', '')} {s.get('shot_description', '')}"
+        for s in result.get("scenes", [])
+    )
+
     return {
         "script_id": script_id,
-        "script_content": full_text,
+        "script_content": plain_narration,
         "script_html": content_html,
         "script_approved": False,
         "script_ai_score": None,   # reset so scorer re-evaluates fresh script
