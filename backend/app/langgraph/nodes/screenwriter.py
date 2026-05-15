@@ -8,7 +8,7 @@ from ...config import get_settings
 from ...database import AsyncSessionLocal
 from ...models.script import Script
 from ...models.project import Project, ProjectStatus
-from ...services.llm_service import chat_json, LLMError
+from ...services.llm_service import chat_json, chat_json_openai, LLMError
 from ...services.sse_service import publish_event
 from ...utils.prompt_templates import SCRIPT_SYSTEM, script_user
 from ..state import ProductionState
@@ -82,31 +82,48 @@ async def screenwriter_node(state: ProductionState) -> dict:
         additional_notes=additional_notes,
     )
 
-    # 1. gemini-2.5-flash — fast (10-30s), blocked by content filter on mature topics
-    # 2. deepseek-v4-flash — 1M context, cheap, minimal filter, fast
-    # 3. kimi-k2.5         — 262K, excellent Vietnamese, last resort
+    # Model chain: OpenAI gpt-5.4 (primary, no content filter) →
+    #   KymaAPI DeepSeek V4 Flash → Gemini 2.5 Flash → Kimi K2.5
     result: dict | None = None
-    models = [
-        (settings.kymaapi_llm_model_long,     "DeepSeek V4 Flash"),
-        (settings.kymaapi_llm_model,          "Gemini 2.5 Flash"),
-        (settings.kymaapi_llm_model_creative, "Kimi K2.5"),
-    ]
-    for idx, (model, label) in enumerate(models):
-        try:
-            if idx > 0:
+
+    # --- Primary: OpenAI direct ---
+    try:
+        result = await chat_json_openai(
+            SCRIPT_SYSTEM, user_prompt,
+            model=settings.openai_llm_model,
+            temperature=0.8,
+            max_tokens=6000,
+        )
+        if isinstance(result, dict) and result.get("scenes"):
+            logger.info("Screenwriter success with OpenAI model=%s", settings.openai_llm_model)
+        else:
+            logger.warning("OpenAI screenwriter returned no scenes — falling back to KymaAPI")
+            result = None
+    except LLMError as e:
+        logger.warning("OpenAI screenwriter failed: %s — falling back to KymaAPI", e)
+
+    # --- Fallback chain: KymaAPI models ---
+    if not result:
+        kyma_models = [
+            (settings.kymaapi_llm_model_long,     "DeepSeek V4 Flash"),
+            (settings.kymaapi_llm_model,          "Gemini 2.5 Flash"),
+            (settings.kymaapi_llm_model_creative, "Kimi K2.5"),
+        ]
+        for idx, (model, label) in enumerate(kyma_models):
+            try:
                 await publish_event(project_id, {
                     "type": "agent_start",
                     "agent": "screenwriter",
                     "message": f"Đang thử {label} để viết kịch bản (có thể mất 1-3 phút)...",
                 })
-            result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000, model=model)
-            if isinstance(result, dict) and result.get("scenes"):
-                logger.info("Screenwriter success with model=%s", model)
-                break
-            logger.warning("Screenwriter model=%s returned no scenes — trying next", model)
-            result = None
-        except LLMError as e:
-            logger.warning("Screenwriter model=%s failed: %s — trying next", model, e)
+                result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000, model=model)
+                if isinstance(result, dict) and result.get("scenes"):
+                    logger.info("Screenwriter success with model=%s", model)
+                    break
+                logger.warning("Screenwriter model=%s returned no scenes — trying next", model)
+                result = None
+            except LLMError as e:
+                logger.warning("Screenwriter model=%s failed: %s — trying next", model, e)
 
     if not result:
         err = "All screenwriter models failed to produce a valid script"

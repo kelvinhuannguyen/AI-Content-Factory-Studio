@@ -2,7 +2,10 @@
 from __future__ import annotations
 import logging
 
-from ...services.llm_service import chat_json, LLMError
+from ...services.llm_service import chat_json, chat_json_openai, LLMError
+from ...config import get_settings
+
+settings = get_settings()
 from ...services.sse_service import publish_event
 from ..state import ProductionState
 
@@ -47,12 +50,24 @@ IMPORTANT: Output ONLY the JSON object. Nothing before or after it."""
     score = 5
     feedback = ""
     try:
-        result = await chat_json(_SCORER_SYSTEM, user_prompt, temperature=0.1, max_tokens=512)
+        # OpenAI mini: fast + structured JSON, no content filter issues
+        result = await chat_json_openai(
+            _SCORER_SYSTEM, user_prompt,
+            model=settings.openai_scorer_model,
+            temperature=0.1,
+            max_tokens=512,
+        )
         score = max(1, min(10, int(result.get("score", 5))))
         feedback = result.get("feedback", "")
     except (LLMError, Exception) as e:
-        logger.warning("Script scorer LLM error (non-fatal, passing through): %s", e)
-        score = 8  # pass-through on error so pipeline isn't blocked
+        logger.warning("OpenAI scorer failed, trying KymaAPI fallback: %s", e)
+        try:
+            result = await chat_json(_SCORER_SYSTEM, user_prompt, temperature=0.1, max_tokens=512)
+            score = max(1, min(10, int(result.get("score", 5))))
+            feedback = result.get("feedback", "")
+        except (LLMError, Exception) as e2:
+            logger.warning("Script scorer all LLMs failed (non-fatal, passing through): %s", e2)
+            score = 8  # pass-through on error so pipeline isn't blocked
 
     will_retry = score < 8 and retry_count < 3
 

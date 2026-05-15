@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 KYMA_CHAT_URL = f"{settings.kymaapi_base_url}/chat/completions"
+OPENAI_CHAT_URL = f"{settings.openai_base_url}/chat/completions"
 
 
 class LLMError(Exception):
@@ -100,6 +101,45 @@ async def chat_json(
     except json.JSONDecodeError as e:
         logger.error("JSON parse error from LLM: %s\nRaw: %s", e, raw[:500])
         raise LLMError(f"LLM returned invalid JSON: {e}") from e
+
+
+async def chat_json_openai(
+    system_prompt: str,
+    user_prompt: str,
+    model: str = "",
+    temperature: float = 0.7,
+    max_tokens: int = 6000,
+) -> Any:
+    """Direct OpenAI API call — returns parsed JSON. Faster than KymaAPI for creative tasks."""
+    if not settings.openai_api_key:
+        raise LLMError("openai_api_key not configured")
+    resolved_model = model or settings.openai_llm_model
+    headers = {
+        "Authorization": f"Bearer {settings.openai_api_key}",
+        "Content-Type": "application/json",
+    }
+    payload: dict[str, Any] = {
+        "model": resolved_model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "response_format": {"type": "json_object"},
+    }
+    async with httpx.AsyncClient(timeout=300) as client:
+        resp = await client.post(OPENAI_CHAT_URL, headers=headers, json=payload)
+    if resp.status_code != 200:
+        logger.error("OpenAI error %s: %s", resp.status_code, resp.text[:400])
+        raise LLMError(f"OpenAI returned {resp.status_code}: {resp.text[:200]}")
+    raw = resp.json()["choices"][0]["message"]["content"]
+    cleaned = _extract_json_from_llm(raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        logger.error("OpenAI JSON parse error: %s\nRaw: %s", e, raw[:500])
+        raise LLMError(f"OpenAI returned invalid JSON: {e}") from e
 
 
 async def chat_vision(
