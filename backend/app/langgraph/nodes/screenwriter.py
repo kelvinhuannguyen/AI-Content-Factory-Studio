@@ -85,8 +85,15 @@ async def screenwriter_node(state: ProductionState) -> dict:
     # Primary: gemini-2.5-flash (fast, 10-30s)
     # Fallback: deepseek-v3 (slower 2-4min but handles mature drama topics gemini filters)
     result: dict | None = None
-    for model in [settings.kymaapi_llm_model, settings.kymaapi_llm_model_long]:
+    models = [settings.kymaapi_llm_model, settings.kymaapi_llm_model_long]
+    for idx, model in enumerate(models):
         try:
+            if idx > 0:
+                await publish_event(project_id, {
+                    "type": "agent_start",
+                    "agent": "screenwriter",
+                    "message": "Gemini bị giới hạn nội dung — đang thử DeepSeek-V3 (có thể mất 2-3 phút)...",
+                })
             result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000, model=model)
             if isinstance(result, dict) and result.get("scenes"):
                 logger.info("Screenwriter success with model=%s", model)
