@@ -185,7 +185,8 @@ SCRIPT:
 Rules:
 - Extract the EXACT number of characters in the script — do not invent or omit
 - Max 3 characters total (prioritize by screen time if more than 3 exist)
-- Supporting characters only if they appear in 2+ scenes with meaningful role
+- Include ALL named OR visually-described characters — even if they appear in only 1 scene
+- For drama/romance scripts: always extract both sides of the central conflict (e.g. protagonist + antagonist + love interest)
 - If user provided name/description hints, apply them to the main character (#CHAR_01)
 - If script is narration-only with no people, return empty characters array
 - VIS must be a single dense sentence an image model can use directly as a prompt prefix
