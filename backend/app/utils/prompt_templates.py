@@ -242,7 +242,7 @@ Return this JSON — no markdown, no text outside JSON:
       "visual_identity_string": "Vietnamese man, 25-28 years old, jet black side-parted hair neatly styled, warm light olive skin, dark brown eyes, small scar above left eyebrow, wearing fitted navy business shirt and dark slacks, #1B2A4A dominant palette"
     }}
   ]
-}}}"""
+}}"""
 
 
 def build_scene_video_prompt(
