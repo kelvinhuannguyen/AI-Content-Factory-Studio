@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     # Vision models for quality scoring (gemini-2.5-flash supports multimodal)
     kymaapi_vision_model: str = "gemini-2.5-flash"         # primary — confirmed working on KymaAPI
     kymaapi_vision_model_fallback: str = "gemini-2.5-flash" # same model as fallback
-    kymaapi_video_model: str = "hailuo-02-1080p"
+    kymaapi_video_model: str = "hailuo-02-768p"
     kymaapi_image_model: str = "flux-1.1-ultra"
     kymaapi_tts_model: str = "eleven-multilingual-v2"
     kymaapi_tts_voice_id: str = "21m00Tcm4TlvDq8ikWAM"   # Rachel — ElevenLabs

@@ -36,6 +36,7 @@ export default function StepScript({ onNext, onBack }: StepProps) {
   const [phase, setPhase] = useState<Phase>("starting");
   const [script, setScript] = useState<ScriptData | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [modelLabel, setModelLabel] = useState("AI");
   const startedRef = useRef(false);
 
   async function loadScript() {
@@ -118,6 +119,7 @@ export default function StepScript({ onNext, onBack }: StepProps) {
 
     if (type === "agent_start" && (agent === "screenwriter" || agent === "script_scorer")) {
       setPhase(p => p === "ready" || p === "already_done" ? p : "writing");
+      if (agent === "screenwriter" && event.model_label) setModelLabel(event.model_label);
     }
 
     if (type === "agent_done" && agent === "script_scorer" && !event.will_retry) {
@@ -153,7 +155,7 @@ export default function StepScript({ onNext, onBack }: StepProps) {
           <p className="mt-1 text-sm text-muted-foreground">
             {phase === "already_done"
               ? "Kịch bản đã hoàn thành — pipeline đang tiếp tục"
-              : "Gemini viết kịch bản chuẩn Hollywood · Chấm điểm AI tự động"}
+              : `${modelLabel} viết kịch bản chuẩn Hollywood · Chấm điểm AI tự động`}
           </p>
         </div>
       </div>

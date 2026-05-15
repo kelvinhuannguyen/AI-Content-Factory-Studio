@@ -67,6 +67,7 @@ async def screenwriter_node(state: ProductionState) -> dict:
     await publish_event(project_id, {
         "type": "agent_start",
         "agent": "screenwriter",
+        "model_label": settings.openai_llm_model,
         "message": f"Đang viết kịch bản{'(lần ' + str(retry_count + 1) + ')' if retry_count > 0 else ''}...",
     })
 
@@ -114,6 +115,7 @@ async def screenwriter_node(state: ProductionState) -> dict:
                 await publish_event(project_id, {
                     "type": "agent_start",
                     "agent": "screenwriter",
+                    "model_label": label,
                     "message": f"Đang thử {label} để viết kịch bản (có thể mất 1-3 phút)...",
                 })
                 result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000, model=model)

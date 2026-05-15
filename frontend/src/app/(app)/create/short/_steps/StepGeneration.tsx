@@ -32,6 +32,7 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
 
   const [tasks, setTasks] = useState<Task[]>([]);
   const [pipelineMsg, setPipelineMsg] = useState("");
+  const [videoModelLabel, setVideoModelLabel] = useState("AI Video");
   const [retrying, setRetrying] = useState(false);
   const [stuckTimer, setStuckTimer] = useState(false);
   const stuckRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -174,6 +175,9 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
     } else if (type === "pipeline_start" || type === "pipeline_queued") {
       setPipelineMsg(event.message || "Pipeline đang render video...");
     } else if (type === "task_start" && task_type) {
+      if (task_type === "video_clip" && (event as any).model_label) {
+        setVideoModelLabel((event as any).model_label);
+      }
       setTasks((prev) => prev.map((t) => {
         const matches = task_type === t.task_type && (!scene_id || t.item_id === scene_id);
         return matches ? { ...t, status: "running" } : t;
@@ -203,7 +207,7 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
       <div>
         <h2 className="text-xl font-bold">Tạo media</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-          Kling-3-Pro + TTS + FFmpeg · tiến độ cập nhật realtime qua SSE
+          {videoModelLabel} + TTS + FFmpeg · tiến độ cập nhật realtime qua SSE
         </p>
       </div>
 
@@ -212,7 +216,7 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
           <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
           <div>
             <p className="text-sm font-medium text-primary">Pipeline đang tạo media...</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Kling-3-Pro + TTS + FFmpeg · Tải danh sách tác vụ...</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{videoModelLabel} + TTS + FFmpeg · Tải danh sách tác vụ...</p>
           </div>
         </div>
       ) : (

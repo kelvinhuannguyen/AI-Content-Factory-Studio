@@ -32,7 +32,9 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
     from ..models.scene import Scene, SceneStatus
     from ..models.shot import Shot as ShotModel
     from ..models.generation_task import GenerationTask, TaskType, TaskStatus
-    from ..services.grok_video_service import generate_video_clip as kyma_gen, VideoGenError
+    from ..services.kyma_video_service import generate_video_clip as kyma_gen, VideoGenError
+    from ..config import get_settings as _get_settings
+    _settings = _get_settings()
     from ..services.r2_service import upload_bytes
     from ..services.sse_service import publish_event
 
@@ -43,6 +45,7 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
         "type": "task_start",
         "task_type": "video_clip",
         "scene_id": scene_id,
+        "model_label": _settings.kymaapi_video_model,
         "message": "Đang tạo video clip...",
     })
 
