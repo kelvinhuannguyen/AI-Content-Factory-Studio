@@ -81,17 +81,12 @@ async def _run_ip_pipeline(state: ProductionState, script_content: str) -> dict:
     if not profiles:
         profiles = [_build_fallback_profile(character_name_hint, character_description_hint, genre, style)]
 
-    # Ensure each profile has required fields (including style/genre for prompt builders)
+    # Always re-assign ref_id + character_index sequentially — LLM sometimes starts at #CHAR_02
     for i, p in enumerate(profiles):
-        if "ref_id" not in p or not p["ref_id"]:
-            p["ref_id"] = f"#CHAR_0{i + 1}"
-        if "character_index" not in p:
-            p["character_index"] = i
-        else:
-            p["character_index"] = i  # enforce order
+        p["ref_id"] = f"#CHAR_0{i + 1}"      # always sequential: #CHAR_01, #CHAR_02 ...
+        p["character_index"] = i               # 0-based index matches ref_id
         if "role" not in p:
             p["role"] = "main" if i == 0 else "supporting"
-        # Pass style/genre so prompt builders produce consistent rendering across hero + sheet
         p["style"] = style
         p["genre"] = genre
 

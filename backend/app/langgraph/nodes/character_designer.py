@@ -106,9 +106,12 @@ async def character_designer_node(state: ProductionState) -> dict:
 
         from ...tasks.character_tasks import _generate_character_image_async
         if profiles:
-            await asyncio.gather(*[
-                _generate_character_image_async(project_id, p) for p in profiles
-            ])
+            # Semaphore: max 2 concurrent image requests (avoid OpenAI rate limit on 4+ chars)
+            sem = asyncio.Semaphore(2)
+            async def _gen_with_sem(p):
+                async with sem:
+                    return await _generate_character_image_async(project_id, p)
+            await asyncio.gather(*[_gen_with_sem(p) for p in profiles])
         else:
             logger.info("No characters found in script — narration-only video")
 
