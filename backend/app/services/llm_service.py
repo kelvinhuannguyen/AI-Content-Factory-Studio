@@ -51,7 +51,7 @@ async def chat_completion(
     if response_format == "json_object":
         payload["response_format"] = {"type": "json_object"}
 
-    async with httpx.AsyncClient(timeout=120) as client:
+    async with httpx.AsyncClient(timeout=300) as client:
         resp = await client.post(KYMA_CHAT_URL, headers=headers, json=payload)
 
     if resp.status_code != 200:

@@ -82,10 +82,10 @@ async def screenwriter_node(state: ProductionState) -> dict:
         additional_notes=additional_notes,
     )
 
-    # Primary: deepseek-v3 (better for long-form, mature drama without content filtering)
-    # Fallback: gemini-2.5-flash
+    # Primary: gemini-2.5-flash (fast, 10-30s)
+    # Fallback: deepseek-v3 (slower 2-4min but handles mature drama topics gemini filters)
     result: dict | None = None
-    for model in [settings.kymaapi_llm_model_long, settings.kymaapi_llm_model]:
+    for model in [settings.kymaapi_llm_model, settings.kymaapi_llm_model_long]:
         try:
             result = await chat_json(SCRIPT_SYSTEM, user_prompt, temperature=0.8, max_tokens=6000, model=model)
             if isinstance(result, dict) and result.get("scenes"):
