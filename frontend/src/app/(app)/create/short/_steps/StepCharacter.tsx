@@ -41,6 +41,7 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
   const [characters, setCharacters] = useState<CharacterDesign[]>([]);
   const [expandedCards, setExpandedCards] = useState<Record<string, boolean>>({});
   const [regenerating, setRegenerating] = useState<Record<string, boolean>>({});
+  const [continueLoading, setContinueLoading] = useState(false);
   const syncedRef = useRef(false);
 
   // ── Data loading ──────────────────────────────────────────────────────
@@ -86,16 +87,24 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
         setPhase("ready");
       } else if (
         state.current_stage === "character_designer" ||
+        state.current_stage === "character_scorer" ||  // scorer running vision API — show as generating
         state.current_stage === "character_review"
       ) {
         setPhase("generating");
         await loadCharacters();
       } else if (
         state.current_stage === "scene_planner" ||
+        state.current_stage === "cinematic_decomposer" ||
+        state.current_stage === "shot_review" ||
+        state.current_stage === "continuity_director" ||
         state.current_stage === "scene_review" ||
         state.current_stage === "video_editor" ||
         state.current_stage === "video_validator" ||
+        state.current_stage === "seo_agent" ||
+        state.current_stage === "seo_review" ||
+        state.paused_at === "shot_review" ||
         state.paused_at === "video_review" ||
+        state.paused_at === "seo_review" ||
         state.status === "completed"
       ) {
         await loadCharacters();
@@ -259,6 +268,17 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
     }
   }
 
+  async function handleContinue() {
+    if (!projectId) return;
+    setContinueLoading(true);
+    try {
+      await fetch(`${BASE}/pipeline/${projectId}/continue`, { method: "POST" });
+      setPhase("generating");
+    } catch { /* silent */ } finally {
+      setContinueLoading(false);
+    }
+  }
+
   function handleUserInputChange(refId: string, value: string) {
     setCharacters((prev) => prev.map((c) =>
       c.ref_id === refId ? { ...c, user_prompt_addition: value } : c
@@ -293,14 +313,14 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
 
       {/* Waiting / Analyzing / Reviewing */}
       {(phase === "waiting" || phase === "analyzing" || phase === "reviewing") && (
-        <div className="flex items-center gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
-          <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0" />
-          <div>
+        <div className="flex items-start gap-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <Loader2 className="h-5 w-5 animate-spin text-primary shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-primary">
               {phase === "analyzing"
                 ? "IP Architect đang phân tích kịch bản..."
                 : phase === "reviewing"
-                ? "Reviewer Agent đang kiểm tra chất lượng..."
+                ? "Reviewer Agent đang kiểm tra chất lượng nhân vật..."
                 : "Chờ pipeline kích hoạt..."}
             </p>
             <p className="text-xs text-muted-foreground mt-0.5">
@@ -310,6 +330,18 @@ export default function StepCharacter({ onNext, onBack }: StepProps) {
                 ? "Senior Art Director AI: kiểm tra Character Consistency, Script Fidelity, Technical Quality"
                 : "LangGraph sẽ tự động kích hoạt sau khi kịch bản được duyệt"}
             </p>
+            {phase === "waiting" && (
+              <button
+                onClick={handleContinue}
+                disabled={continueLoading}
+                className="mt-3 flex items-center gap-1.5 rounded-lg border border-primary/30 bg-background px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/5 transition-colors disabled:opacity-40"
+              >
+                {continueLoading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RefreshCw className="h-3.5 w-3.5" />}
+                Tiếp tục pipeline (nếu bị dừng)
+              </button>
+            )}
           </div>
         </div>
       )}
