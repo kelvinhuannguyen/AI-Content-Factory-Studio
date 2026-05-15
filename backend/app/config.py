@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     # xAI Grok (video generation)
     xai_api_key: str = ""
-    xai_video_model: str = "grok-2-aurora"
+    xai_video_model: str = "grok-4.3"
 
     # Audio
     elevenlabs_api_key: str = ""
