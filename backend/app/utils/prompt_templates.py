@@ -179,7 +179,7 @@ Genre: {genre} | Style: {style}
 
 SCRIPT:
 ---
-{script_content[:3000]}
+{script_content[:6000]}
 ---
 
 Rules:

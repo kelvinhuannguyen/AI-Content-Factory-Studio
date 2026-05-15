@@ -51,11 +51,14 @@ async def _run_ip_pipeline(state: ProductionState, script_content: str) -> dict:
             CHARACTER_IP_ARCHITECT_SYSTEM,
             user_prompt,
             temperature=0.3,
-            max_tokens=2048,
+            max_tokens=4096,
         )
+        if not isinstance(result, dict):
+            raise ValueError(f"IP Architect returned non-dict (type={type(result).__name__}): {str(result)[:200]}")
         profiles: list[dict] = result.get("characters", [])
         if not isinstance(profiles, list):
-            raise ValueError("IP Architect returned non-list characters")
+            raise ValueError(f"IP Architect 'characters' is not a list: {type(profiles)}")
+        logger.info("IP Architect extracted %d character(s) from script", len(profiles))
     except (LLMError, Exception) as e:
         logger.warning("IP Architect LLM failed (falling back to user hints): %s", e)
         profiles = []
