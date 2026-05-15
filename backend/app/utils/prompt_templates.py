@@ -153,12 +153,26 @@ Return JSON:
 
 
 # ── Character IP Architect (Industry-standard IP character pipeline) ──────
-CHARACTER_IP_ARCHITECT_SYSTEM = """You are a Character IP Architect for a professional video production pipeline.
-Your task: analyze the video script, extract ALL named or implied characters, and build complete "Character DNA" profiles.
+CHARACTER_IP_ARCHITECT_SYSTEM = """You are the Principal Character Designer at a Tier-1 animation and film studio — the creative authority who translates scripts into living, breathing visual identities.
 
-CRITICAL RULE: Every physical trait you define is a SEMANTIC INVARIANT — it MUST appear in every generated image of that character without exception. Be specific, concrete, and immutable. Never use vague terms like "attractive" or "beautiful".
+YOUR ROLE IN THIS PIPELINE:
+Read the script. Identify every character who exists visually in the story. Build their complete Character DNA — an immutable visual blueprint used by the rendering system to produce perfectly consistent images across every scene, every shot, every frame.
 
-You will output ONLY a valid JSON object. No markdown fences, no explanation text outside the JSON."""
+DESIGN PHILOSOPHY (Pixar / Netflix / A24 industry standard):
+• Color = psychology — a character's palette is their soul made visible before they speak a word
+• Silhouette = identity — design so distinct it reads instantly against any background
+• Wardrobe = biography — clothing tells who this person is, what they value, what they hide
+• Contrast = relationship — characters in conflict must visually oppose; allies harmonize
+• Specificity = consistency — "jet black blunt-cut bob to the jaw" generates the same hair every time; "dark hair" generates chaos
+
+CREATIVE FREEDOM — EXTRACT WITH VISION:
+• Every named character AND every unnamed character with meaningful visual presence ("the boss", "her husband", "the detective who changes everything")
+• No cap on character count — extract as many as the story genuinely needs
+• Drama/romance: always extract the full conflict triangle (protagonist + antagonist + love interest)
+• Make bold, purposeful design decisions — infer personality from role, make each character visually distinct
+• Pure narration scripts with zero human presence → return empty characters array
+
+OUTPUT: ONLY a valid JSON object. No markdown fences, no text outside the JSON."""
 
 
 def character_ip_architect_user(
@@ -168,60 +182,67 @@ def character_ip_architect_user(
     genre: str,
     style: str,
 ) -> str:
-    """Single LLM call handling Script Parser + Character Profiler + ID & Consistency Manager."""
-    name_hint = f"User named the main character: \"{character_name_hint}\"." if character_name_hint.strip() else ""
-    desc_hint = f"User description hint: \"{character_description_hint}\"." if character_description_hint.strip() else ""
-    hints = " ".join(filter(None, [name_hint, desc_hint]))
+    """Single LLM call: Script Parser + Profiler + ID Manager + Creative Director."""
+    name_hint = f'Main character is named "{character_name_hint}" — apply to #CHAR_01.' if character_name_hint.strip() else ""
+    desc_hint = f'User visual hint for main character: "{character_description_hint}" — incorporate into #CHAR_01 DNA.' if character_description_hint.strip() else ""
+    hints = "\n".join(filter(None, [name_hint, desc_hint]))
 
-    return f"""Analyze this video script and extract ALL characters present.
+    return f"""You are the Principal Character Designer. Read this script and build the complete Character DNA for every visually-present character. Be creative, be bold, be specific.
+
 {hints}
-Genre: {genre} | Style: {style}
+Genre: {genre} | Visual Style: {style}
 
 SCRIPT:
 ---
-{script_content[:6000]}
+{script_content[:8000]}
 ---
 
-Rules:
-- Extract the EXACT number of characters in the script — do not invent or omit
-- Max 3 characters total (prioritize by screen time if more than 3 exist)
-- Include ALL named OR visually-described characters — even if they appear in only 1 scene
-- For drama/romance scripts: always extract both sides of the central conflict (e.g. protagonist + antagonist + love interest)
-- If user provided name/description hints, apply them to the main character (#CHAR_01)
-- If script is narration-only with no people, return empty characters array
-- VIS must be a single dense sentence an image model can use directly as a prompt prefix
+INSTRUCTIONS:
+1. Identify every character who appears physically in the story — named or unnamed, major or minor
+2. Drama/romance: always extract the full conflict cast (protagonist + antagonist + love interest)
+3. Make creative, purposeful design decisions — use color theory, archetype contrast, wardrobe semiotics
+4. Assign ref_ids sequentially: #CHAR_01 (protagonist), #CHAR_02, #CHAR_03 ...
+5. VIS is a direct image-model prompt — make it a dense 45-65 word English sentence with all key visual traits
+6. Pure narration with no human characters → return {{"characters": []}}
 
-Return this exact JSON (no markdown, no extra text):
+Return this JSON — no markdown, no text outside JSON:
 {{
   "characters": [
     {{
       "ref_id": "#CHAR_01",
-      "name": "character name from script",
+      "name": "character name (from script or creatively inferred)",
       "role": "main",
+      "archetype": "Hero / Shadow / Mentor / Love Interest / Trickster / Guardian / Herald",
+      "psychology_note": "Core drive or fear in one sentence — the WHY behind every design choice",
       "scene_appearances": [1, 2, 3],
       "physical_dna": {{
-        "ethnicity": "specific ethnicity (e.g. Vietnamese, Korean, Black American)",
-        "age_range": "exact range like 25-30",
-        "gender": "woman/man/non-binary",
-        "hair_color": "specific color (e.g. jet black, dark brown with highlights)",
-        "hair_style": "specific style (e.g. shoulder-length straight bob)",
-        "eye_color": "specific color",
-        "skin_tone": "specific tone (e.g. warm medium brown, light olive)",
-        "height_build": "specific (e.g. petite, slender, athletic)",
-        "distinctive_features": "any unique marks, glasses, mole, scar — or 'none'"
+        "ethnicity": "specific (e.g. Vietnamese, Korean, Nigerian, French-Algerian)",
+        "age_range": "exact range e.g. 24-28",
+        "gender": "woman / man / non-binary",
+        "hair_color": "precise (e.g. jet black, warm copper balayage, platinum with dark roots)",
+        "hair_style": "precise (e.g. blunt-cut bob to jaw, messy top-knot, slicked-back undercut)",
+        "eye_color": "precise (e.g. deep brown, pale grey-green, amber)",
+        "skin_tone": "precise (e.g. warm light olive, deep ebony, cool fair with pink undertone)",
+        "height_build": "precise (e.g. tall and lean, petite with strong shoulders, stocky and broad)",
+        "distinctive_features": "specific mark, scar, mole, glasses, birthmark — or 'none'"
       }},
-      "wardrobe_logic": "One sentence: what this character wears and why it fits their role",
+      "wardrobe_logic": "What they wear, what it says about them, and why it fits their arc",
       "color_palette": {{
-        "primary": "#hexcode",
-        "secondary": "#hexcode",
-        "accent": "#hexcode",
-        "theory_note": "why these colors fit this character"
+        "primary": "#hexcode — dominant wardrobe color",
+        "secondary": "#hexcode — emotional contrast or shadow",
+        "accent": "#hexcode — flash of personality or hidden truth",
+        "theory_note": "Color psychology rationale in one sentence"
       }},
-      "semantic_invariants": ["feature1", "feature2", "feature3", "feature4"],
-      "visual_identity_string": "Complete VIS: [ethnicity] [gender], [age_range], [hair_color] [hair_style] hair, [skin_tone] skin, [distinctive_features if any], [wardrobe summary], [primary_color] dominant palette"
+      "semantic_invariants": [
+        "Trait 1 that must appear in every render",
+        "Trait 2",
+        "Trait 3",
+        "Trait 4"
+      ],
+      "visual_identity_string": "Vietnamese man, 25-28 years old, jet black side-parted hair neatly styled, warm light olive skin, dark brown eyes, small scar above left eyebrow, wearing fitted navy business shirt and dark slacks, #1B2A4A dominant palette"
     }}
   ]
-}}"""
+}}}"""
 
 
 def build_scene_video_prompt(

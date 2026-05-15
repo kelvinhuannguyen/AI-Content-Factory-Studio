@@ -12,7 +12,10 @@ Industry standards applied:
 from __future__ import annotations
 import logging
 
-from ...services.llm_service import chat_json, LLMError
+from ...services.llm_service import chat_json, chat_json_openai, LLMError
+from ...config import get_settings
+
+_settings = get_settings()
 from ...utils.prompt_templates import CHARACTER_IP_ARCHITECT_SYSTEM, character_ip_architect_user
 from ..state import ProductionState
 
@@ -47,12 +50,23 @@ async def _run_ip_pipeline(state: ProductionState, script_content: str) -> dict:
             genre=genre,
             style=style,
         )
-        result = await chat_json(
-            CHARACTER_IP_ARCHITECT_SYSTEM,
-            user_prompt,
-            temperature=0.3,
-            max_tokens=4096,
-        )
+        # OpenAI primary — creative, no content filter, max context
+        try:
+            result = await chat_json_openai(
+                CHARACTER_IP_ARCHITECT_SYSTEM,
+                user_prompt,
+                model=_settings.openai_llm_model,
+                temperature=0.7,   # creative freedom
+                max_tokens=6000,   # ensemble casts need more tokens
+            )
+        except LLMError as e:
+            logger.warning("OpenAI IP Architect failed, falling back to KymaAPI: %s", e)
+            result = await chat_json(
+                CHARACTER_IP_ARCHITECT_SYSTEM,
+                user_prompt,
+                temperature=0.5,
+                max_tokens=4096,
+            )
         if not isinstance(result, dict):
             raise ValueError(f"IP Architect returned non-dict (type={type(result).__name__}): {str(result)[:200]}")
         profiles: list[dict] = result.get("characters", [])
