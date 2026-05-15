@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     kymaapi_key: str = ""
     kymaapi_base_url: str = "https://api.kymaapi.com/v1"
     kymaapi_llm_model: str = "gemini-2.5-flash"
-    kymaapi_llm_model_long: str = "deepseek-v3"
+    kymaapi_llm_model_long: str = "deepseek-v4-flash"   # 1M context, cheap, minimal content filter
+    kymaapi_llm_model_creative: str = "kimi-k2.5"       # fallback: 262K, great Vietnamese
     # Vision models for quality scoring (gemini-2.5-flash supports multimodal)
     kymaapi_vision_model: str = "gemini-2.5-flash"         # primary — confirmed working on KymaAPI
     kymaapi_vision_model_fallback: str = "gemini-2.5-flash" # same model as fallback
