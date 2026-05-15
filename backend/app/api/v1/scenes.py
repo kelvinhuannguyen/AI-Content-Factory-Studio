@@ -158,7 +158,7 @@ async def regenerate_scene_prompt(scene_id: str, body: dict, db: AsyncSession = 
             style=project.style or "",
             production_type=str(project.production_type),
         )
-        result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=500)
+        result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=3000)
         scene.video_prompt = result.get("video_prompt", scene.video_prompt)
     except LLMError as e:
         raise HTTPException(502, f"AI error: {e}")
@@ -221,7 +221,7 @@ Trả về JSON (bắt buộc hoàn chỉnh, không cắt ngang):
                 production_type=str(project.production_type),
                 vis_map=vis_map or None,
             )
-            result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=1500)
+            result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=3000)
 
             if not isinstance(result, dict):
                 raise ValueError(f"LLM returned non-dict: {type(result)}")

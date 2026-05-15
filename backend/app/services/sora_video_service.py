@@ -29,11 +29,11 @@ def _headers() -> dict:
 
 # aspect_ratio → Sora size string
 _SIZE_MAP = {
-    "9:16":  "1080x1920",
-    "16:9":  "1920x1080",
-    "1:1":   "1080x1080",
-    "4:3":   "1440x1080",
-    "3:4":   "1080x1440",
+    "9:16":  "720x1280",   # portrait — confirmed supported by sora-2
+    "16:9":  "1280x720",   # landscape — confirmed supported by sora-2
+    "1:1":   "720x1280",   # default to portrait for unsupported ratios
+    "4:3":   "1280x720",
+    "3:4":   "720x1280",
 }
 
 
