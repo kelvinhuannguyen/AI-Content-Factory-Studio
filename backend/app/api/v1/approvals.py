@@ -46,16 +46,20 @@ async def _do_resume(project_id: str, step: str, action: str, approved: bool, pa
         _resume_locks.discard(project_id)
 
 
-def _action_html(action: str, step: str) -> HTMLResponse:
+def _action_html(action: str, step: str, project_id: str = "") -> HTMLResponse:
+    from ...config import get_settings
+    frontend_url = get_settings().frontend_url
+    redirect_url = f"{frontend_url}/projects/{project_id}" if project_id else f"{frontend_url}/dashboard"
+
     responses = {
-        "proceed": ("Đã duyệt — Tiếp tục",   "✅", "#16a34a", "Pipeline tiếp tục tự động. Bạn có thể đóng trang này."),
-        "remake":  ("Yêu cầu làm lại",         "🔄", "#d97706", "Hệ thống sẽ tạo lại video. Bạn có thể đóng trang này."),
-        "hold":    ("Đã tạm dừng",             "⏸", "#52525b", "Project ở trạng thái hold. Vào dashboard để tiếp tục."),
+        "proceed": ("Đã duyệt — Tiếp tục",   "✅", "#16a34a", "Pipeline tiếp tục tự động."),
+        "remake":  ("Yêu cầu làm lại",         "🔄", "#d97706", "Hệ thống sẽ tạo lại video."),
+        "hold":    ("Đã tạm dừng",             "⏸", "#52525b", "Project ở trạng thái hold."),
         "approve": ("Đã duyệt thành công",     "✅", "#16a34a", f"<strong>{_step_label(step)}</strong> đã được duyệt.<br>Pipeline tự động tiếp tục."),
         "reject":  ("Đã từ chối",              "❌", "#dc2626", f"<strong>{_step_label(step)}</strong> bị từ chối.<br>Hệ thống sẽ tạo lại."),
     }
     title, emoji, color, body = responses.get(action, ("Hoàn thành", "✅", "#16a34a", ""))
-    return HTMLResponse(content=_html_page(title, emoji, body, color))
+    return HTMLResponse(content=_html_page(title, emoji, body, color, redirect_url))
 
 
 @router.get("/{token}")
@@ -90,7 +94,7 @@ async def process_approval_via_link(
     # Resume chạy background — tránh browser timeout khi node mất nhiều phút
     background_tasks.add_task(_do_resume, project_id, step, action, approved, package)
 
-    return _action_html(action, step)
+    return _action_html(action, step, project_id=project_id)
 
 
 @router.post("/{token}")
@@ -116,7 +120,7 @@ async def process_approval_api(
     logger.info("API approval: project=%s step=%s action=%s package=%s", project_id, step, action, package)
     background_tasks.add_task(_do_resume, project_id, step, action, approved, package)
 
-    return _action_html(action, step)
+    return _action_html(action, step, project_id=project_id)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -197,7 +201,29 @@ def _step_label(step: str) -> str:
     }.get(step, step)
 
 
-def _html_page(title: str, emoji: str, body: str, color: str) -> str:
+def _html_page(title: str, emoji: str, body: str, color: str, redirect_url: str = "") -> str:
+    redirect_script = ""
+    redirect_banner = ""
+    if redirect_url:
+        redirect_script = f"""
+  <script>
+    var countdown = 3;
+    var el = document.getElementById('countdown');
+    var timer = setInterval(function() {{
+      countdown--;
+      if (el) el.textContent = countdown;
+      if (countdown <= 0) {{
+        clearInterval(timer);
+        window.location.href = "{redirect_url}";
+      }}
+    }}, 1000);
+  </script>"""
+        redirect_banner = f"""
+    <div class="redirect">
+      Chuyển về dự án sau <span id="countdown">3</span>s &nbsp;·&nbsp;
+      <a href="{redirect_url}">Chuyển ngay →</a>
+    </div>"""
+
     return f"""<!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -227,15 +253,27 @@ def _html_page(title: str, emoji: str, body: str, color: str) -> str:
     .emoji {{ font-size: 64px; line-height: 1; margin-bottom: 16px }}
     h1 {{ font-size: 22px; color: {color}; margin-bottom: 12px }}
     p {{ font-size: 15px; color: #64748b; line-height: 1.6 }}
-    .hint {{ margin-top: 24px; font-size: 13px; color: #94a3b8 }}
+    .redirect {{
+      margin-top: 28px;
+      padding: 12px 16px;
+      background: #f1f5f9;
+      border-radius: 10px;
+      font-size: 14px;
+      color: #475569;
+    }}
+    .redirect a {{
+      color: {color};
+      font-weight: 600;
+      text-decoration: none;
+    }}
+    .redirect a:hover {{ text-decoration: underline }}
   </style>
 </head>
 <body>
   <div class="card">
     <div class="emoji">{emoji}</div>
     <h1>{title}</h1>
-    <p>{body}</p>
-    <p class="hint">Bạn có thể đóng cửa sổ này.</p>
-  </div>
+    <p>{body}</p>{redirect_banner}
+  </div>{redirect_script}
 </body>
 </html>"""
