@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { WizardShell } from "@/components/layout/WizardShell";
 import { SHORT_VIDEO_STEPS } from "@/lib/constants";
 import StepTopic from "./_steps/StepTopic";
@@ -49,7 +49,7 @@ function pipelineStateToStep(state: { paused_at?: string; current_stage?: string
 export default function ShortVideoWizard() {
   const { stepIndex, nextStep, prevStep, project, setProject, reset, setStepIndex } = useWizardStore();
 
-  // On mount with an existing project, jump to the correct wizard step based on pipeline state
+  // On mount: jump to correct step based on pipeline state
   useEffect(() => {
     if (!project?.id) return;
     fetch(`${BASE}/pipeline/${project.id}/state`)
@@ -60,6 +60,28 @@ export default function ShortVideoWizard() {
       })
       .catch(() => {});
   }, [project?.id]);
+
+  // Poll pipeline state every 5s when at an interrupt step (Trạm 1/2/3).
+  // Detects when email approval was done → auto-advances wizard without requiring
+  // a second click on the dashboard.
+  const INTERRUPT_STEPS = new Set([3, 4, 7]);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!project?.id || !INTERRUPT_STEPS.has(stepIndex)) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    pollRef.current = setInterval(() => {
+      fetch(`${BASE}/pipeline/${project.id}/state`)
+        .then((r) => r.json())
+        .then((state) => {
+          const target = pipelineStateToStep(state);
+          if (target !== stepIndex) setStepIndex(Math.max(target, stepIndex));
+        })
+        .catch(() => {});
+    }, 5000);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [project?.id, stepIndex]);
 
   const currentStep = SHORT_VIDEO_STEPS[stepIndex] ?? SHORT_VIDEO_STEPS[0];
   const StepComponent = STEP_COMPONENTS[stepIndex] ?? StepTopic;
