@@ -53,6 +53,11 @@ async def generate_video_clip(
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(submit_url, headers=_headers(), json=payload)
 
+    if resp.status_code == 403:
+        # PERMISSION_DENIED — Veo preview access not granted; fail immediately, don't retry
+        raise VeoVideoError(f"Veo access denied (403) — request preview access at ai.google.dev/gemini-api/docs/video")
+    if resp.status_code == 429:
+        raise VeoVideoError(f"Veo quota exceeded (429) — check billing at ai.dev/rate-limit")
     if resp.status_code not in (200, 202):
         raise VeoVideoError(f"Veo submit {resp.status_code}: {resp.text[:300]}")
 
