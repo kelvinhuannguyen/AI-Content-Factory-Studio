@@ -87,8 +87,8 @@ async def screenwriter_node(state: ProductionState) -> dict:
     # 3. kimi-k2.5         — 262K, excellent Vietnamese, last resort
     result: dict | None = None
     models = [
-        (settings.kymaapi_llm_model,      "Gemini 2.5 Flash"),
-        (settings.kymaapi_llm_model_long,  "DeepSeek V4 Flash"),
+        (settings.kymaapi_llm_model_long,     "DeepSeek V4 Flash"),
+        (settings.kymaapi_llm_model,          "Gemini 2.5 Flash"),
         (settings.kymaapi_llm_model_creative, "Kimi K2.5"),
     ]
     for idx, (model, label) in enumerate(models):
