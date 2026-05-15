@@ -1,9 +1,8 @@
 """Image generation fallback chain.
 
 Chain order:
-  1. ComfyUI (local X13 or RunPod)
-  2. KymaAPI → flux-1.1-ultra (async job)
-  3. OpenAI → gpt-image-2 (b64_json response)
+  1. KymaAPI → flux-1.1-ultra (async job)
+  2. OpenAI → gpt-image-2 (b64_json response)
 
 Returns: PNG bytes
 """
@@ -14,7 +13,6 @@ import logging
 import httpx
 
 from ..config import get_settings
-from .comfyui_service import generate_character_image as comfyui_generate, ComfyUIError
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -140,14 +138,7 @@ async def generate_image(
     Generate an image using the fallback chain.
     Returns (image_bytes, provider_used).
     """
-    # 1. Try ComfyUI
-    try:
-        img = await comfyui_generate(prompt, variant_index=variant_index, ref_image_bytes=ref_image_bytes)
-        return img, "comfyui"
-    except ComfyUIError as e:
-        logger.warning("ComfyUI failed (variant %d): %s — falling back to KymaAPI", variant_index, e)
-
-    # 2. Try KymaAPI flux-1.1-ultra
+    # 1. Try KymaAPI flux-1.1-ultra
     if settings.kymaapi_key:
         try:
             img = await _kymaapi_generate(prompt, negative_prompt=negative_prompt)
@@ -155,7 +146,7 @@ async def generate_image(
         except ImageGenError as e:
             logger.warning("KymaAPI failed: %s — falling back to OpenAI gpt-image-2", e)
 
-    # 3. Try OpenAI gpt-image-2
+    # 2. Try OpenAI gpt-image-2
     if settings.openai_api_key:
         try:
             img = await _openai_generate(prompt)
