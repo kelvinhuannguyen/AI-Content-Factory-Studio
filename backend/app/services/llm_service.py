@@ -125,7 +125,7 @@ async def chat_json_openai(
             {"role": "user",   "content": user_prompt},
         ],
         "temperature": temperature,
-        "max_tokens": max_tokens,
+        "max_completion_tokens": max_tokens,  # newer OpenAI models require this param name
         "response_format": {"type": "json_object"},
     }
     async with httpx.AsyncClient(timeout=300) as client:

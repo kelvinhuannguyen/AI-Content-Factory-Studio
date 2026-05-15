@@ -39,8 +39,8 @@ class Settings(BaseSettings):
 
     # OpenAI direct (screenwriter + scorer — faster than KymaAPI routing)
     openai_base_url: str = "https://api.openai.com/v1"
-    openai_llm_model: str = "gpt-5.4"         # screenwriter — flagship quality
-    openai_scorer_model: str = "gpt-5.4-mini"  # script scorer — fast + cheap
+    openai_llm_model: str = "gpt-5.4-mini"    # screenwriter — chat model (gpt-5.4 base is completions-only)
+    openai_scorer_model: str = "gpt-5.4-nano"  # script scorer — fast + cheap
 
     # Audio
     elevenlabs_api_key: str = ""
