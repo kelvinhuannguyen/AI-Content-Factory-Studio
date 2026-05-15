@@ -32,7 +32,7 @@ async def _generate_clip_async(task, project_id, scene_id, video_prompt, duratio
     from ..models.scene import Scene, SceneStatus
     from ..models.shot import Shot as ShotModel
     from ..models.generation_task import GenerationTask, TaskType, TaskStatus
-    from ..services.kyma_video_service import generate_video_clip as kyma_gen, VideoGenError
+    from ..services.grok_video_service import generate_video_clip as kyma_gen, VideoGenError
     from ..services.r2_service import upload_bytes
     from ..services.sse_service import publish_event
 
