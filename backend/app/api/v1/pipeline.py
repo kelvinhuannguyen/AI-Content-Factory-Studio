@@ -178,6 +178,43 @@ async def get_pipeline_state(project_id: uuid.UUID, db: AsyncSession = Depends(g
         return {"status": "not_started", "current_stage": None, "paused_at": None, "langgraph_error": str(e)}
 
 
+@router.post("/{project_id}/restart-from-video", status_code=202)
+async def restart_from_video(
+    project_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Override checkpoint to re-run the video pipeline from video_editor onwards.
+    Use when: clips failed (FK bug), assembly was skipped, or SEO was reached without a video.
+    Uses aupdate_state to pretend continuity_director just finished → next = video_editor.
+    """
+    await _get_project_or_404(project_id, db)
+
+    graph = await get_graph()
+    config = get_thread_config(str(project_id))
+
+    state = await graph.aget_state(config)
+    if not state or not state.values:
+        raise HTTPException(400, "Pipeline chưa bắt đầu. Dùng /start để khởi động.")
+
+    # Override checkpoint: pretend continuity_director just ran → next = ['video_editor']
+    await graph.aupdate_state(
+        config,
+        {"video_retry_count": 0, "current_stage": "continuity_director"},
+        as_node="continuity_director",
+    )
+
+    async def _run():
+        try:
+            await graph.ainvoke({}, config=config)
+        except Exception as e:
+            logger.error("restart-from-video error for %s: %s", project_id, e)
+
+    background_tasks.add_task(_run)
+    return {"status": "restarting_video", "project_id": str(project_id)}
+
+
 @router.post("/{project_id}/continue", status_code=202)
 async def continue_pipeline(
     project_id: uuid.UUID,

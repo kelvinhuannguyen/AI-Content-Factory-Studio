@@ -85,13 +85,16 @@ async def video_editor_node(state: ProductionState) -> dict:
                 "prompt": s.prompt,
                 "duration": min(s.duration, 8),
                 "label": s.shot_id,
+                "clip_r2_key": s.clip_r2_key,  # None if not yet generated
             }
             for s in shots
         ]
+        pending = sum(1 for c in clip_items if not c.get("clip_r2_key"))
+        done_already = len(clip_items) - pending
         await publish_event(project_id, {
             "type": "pipeline_queued",
             "shot_count": len(shots),
-            "message": f"Đang tạo {len(shots)} shots ≤8s (Cinematic) + giọng đọc + subtitle + nhạc nền...",
+            "message": f"Đang tạo {pending} shots mới ({done_already} đã có) + giọng đọc + subtitle + nhạc nền...",
         })
     else:
         clip_items = [
@@ -100,20 +103,31 @@ async def video_editor_node(state: ProductionState) -> dict:
                 "prompt": s.video_prompt or f"Scene {s.scene_number}: {s.description or s.title or ''}",
                 "duration": s.duration_seconds or 8,
                 "label": f"SC{s.scene_number:02d}",
+                "clip_r2_key": s.clip_r2_key,
             }
             for s in scenes
         ]
+        pending = sum(1 for c in clip_items if not c.get("clip_r2_key"))
         await publish_event(project_id, {
             "type": "pipeline_queued",
             "scene_count": len(scenes),
-            "message": f"Đang tạo {len(scenes)} clip + giọng đọc + subtitle + nhạc nền...",
+            "message": f"Đang tạo {pending} clip + giọng đọc + subtitle + nhạc nền...",
         })
 
-    # ── 2. Generate video clips (sequential) ─────────────────────────────
+    # ── 2. Generate video clips (sequential, skip already-done) ─────────
     from ...tasks.video_tasks import _generate_clip_async
     from ...tasks.pipeline_tasks import _MockTask
 
     for item in clip_items:
+        if item.get("clip_r2_key"):
+            # Already generated in a previous run — emit done and skip
+            await publish_event(project_id, {
+                "type": "task_done",
+                "task_type": "video_clip",
+                "scene_id": item["id"],
+                "r2_key": item["clip_r2_key"],
+            })
+            continue
         try:
             await _generate_clip_async(
                 _MockTask(), project_id, item["id"],

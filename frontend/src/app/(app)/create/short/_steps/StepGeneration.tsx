@@ -110,10 +110,34 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
     setRetrying(true);
     setStuckTimer(false);
     try {
-      await fetch(`${BASE}/pipeline/${projectId}/continue`, { method: "POST" });
-      setPipelineMsg("Đã gửi lệnh retry — pipeline đang khởi động lại...");
+      const r = await fetch(`${BASE}/pipeline/${projectId}/continue`, { method: "POST" });
+      if (r.ok) {
+        setPipelineMsg("Đã gửi lệnh retry — pipeline đang khởi động lại...");
+      } else {
+        // Pipeline likely at interrupt (seo_review) — offer video restart
+        setPipelineMsg("Pipeline đang ở trạm duyệt. Dùng 'Làm lại video' để tạo lại từ đầu.");
+      }
     } catch {
       setPipelineMsg("Retry thất bại — kiểm tra kết nối mạng.");
+    } finally {
+      setTimeout(() => setRetrying(false), 3000);
+    }
+  };
+
+  const handleRestartVideo = async () => {
+    if (!projectId || retrying) return;
+    setRetrying(true);
+    try {
+      const r = await fetch(`${BASE}/pipeline/${projectId}/restart-from-video`, { method: "POST" });
+      if (r.ok) {
+        setPipelineMsg("Đang làm lại video từ đầu (bỏ qua clips đã có)...");
+        setTasks((prev) => prev.map((t) => ({ ...t, status: "waiting" as TaskStatus })));
+        setStuckTimer(false);
+      } else {
+        setPipelineMsg("Không thể khởi động lại — kiểm tra Railway logs.");
+      }
+    } catch {
+      setPipelineMsg("Lỗi kết nối — kiểm tra mạng.");
     } finally {
       setTimeout(() => setRetrying(false), 3000);
     }
@@ -247,21 +271,36 @@ export default function StepGeneration({ onNext, onBack }: StepProps) {
 
           {/* Stuck banner: no progress after 90s */}
           {stuckTimer && !allDone && (
-            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
-              <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
-                Có vẻ pipeline bị dừng (server restart?)
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 space-y-3">
+              <div>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  Có vẻ pipeline bị dừng
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Server có thể đã restart, hoặc pipeline đã chạy xong nhưng UI chưa cập nhật.
+                </p>
+              </div>
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={handleRetry}
+                  disabled={retrying}
+                  className="flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 transition-colors"
+                >
+                  {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  {retrying ? "Đang xử lý..." : "Tiếp tục (từ điểm dừng)"}
+                </button>
+                <button
+                  onClick={handleRestartVideo}
+                  disabled={retrying}
+                  className="flex items-center gap-2 rounded-lg border border-amber-500/50 px-4 py-2 text-sm font-semibold text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 disabled:opacity-60 transition-colors"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Làm lại video
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                "Tiếp tục" nếu pipeline chỉ bị pause · "Làm lại video" nếu clips chưa được tạo
               </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Server có thể đã khởi động lại giữa chừng. Nhấn Retry để tiếp tục từ điểm đã dừng.
-              </p>
-              <button
-                onClick={handleRetry}
-                disabled={retrying}
-                className="mt-3 flex items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-60 transition-colors"
-              >
-                {retrying ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                {retrying ? "Đang retry..." : "Retry pipeline"}
-              </button>
             </div>
           )}
 
