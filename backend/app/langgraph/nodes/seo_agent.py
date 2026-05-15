@@ -30,6 +30,16 @@ async def seo_agent_node(state: ProductionState) -> dict:
     project_id = state["project_id"]
     retry = state.get("seo_retry_count", 0)
 
+    # Guard: skip SEO if no final video was assembled (clips failed)
+    if not state.get("final_video_r2_key"):
+        await publish_event(project_id, {
+            "type": "pipeline_error",
+            "agent": "seo_agent",
+            "error": "Không tạo được video — dùng 'Làm lại video' để render lại trước khi tạo SEO.",
+        })
+        logger.warning("seo_agent: no final_video_r2_key — aborting to avoid SEO without video")
+        raise RuntimeError("SEO aborted: no final video. Use /restart-from-video to regenerate clips.")
+
     await publish_event(project_id, {
         "type": "agent_start",
         "agent": "seo_agent",

@@ -7,7 +7,7 @@ from ..config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-_AUDIO_GEN_URL = f"{settings.kymaapi_base_url}/audio/generations"
+_AUDIO_GEN_URL = f"{settings.kymaapi_base_url}/music/generations"
 _JOBS_URL = f"{settings.kymaapi_base_url}/jobs"
 _POLL_INTERVAL = 8
 _MAX_WAIT = 120  # 2 min max for BGM

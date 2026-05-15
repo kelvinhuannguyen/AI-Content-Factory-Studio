@@ -221,7 +221,10 @@ Trả về JSON (bắt buộc hoàn chỉnh, không cắt ngang):
                 production_type=str(project.production_type),
                 vis_map=vis_map or None,
             )
-            result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=600)
+            result = await chat_json(SCENE_PROMPT_SYSTEM, user_prompt, temperature=0.7, max_tokens=1500)
+
+            if not isinstance(result, dict):
+                raise ValueError(f"LLM returned non-dict: {type(result)}")
 
             # Apply regional prompting if vis_map provided
             characters_in_scene: list = result.get("characters_in_scene", [])
