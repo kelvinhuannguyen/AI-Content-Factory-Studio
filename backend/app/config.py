@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     openai_scorer_model: str = "gpt-5.4-nano"  # script scorer — fast + cheap
     openai_image_model: str = "gpt-image-2"    # character image fallback
 
+    # FPT AI TTS (Vietnamese-native, primary for vi language)
+    fpt_tts_api_key: str = ""
+    fpt_tts_voice_vi: str = "banmai"    # female South Vietnamese
+    fpt_tts_voice_male_vi: str = "leminh"  # male South Vietnamese
+
     # Audio
     elevenlabs_api_key: str = ""
     openai_api_key: str = ""
