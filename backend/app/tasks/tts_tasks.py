@@ -23,11 +23,11 @@ def _run(coro):
     max_retries=2,
     default_retry_delay=10,
 )
-def generate_voiceover(self, project_id: str, narration_text: str, language: str = "vi"):
-    return _run(_tts_async(self, project_id, narration_text, language))
+def generate_voiceover(self, project_id: str, narration_text: str, language: str = "vi", narrator_gender: str = "woman"):
+    return _run(_tts_async(self, project_id, narration_text, language, narrator_gender))
 
 
-async def _tts_async(task, project_id, narration_text, language):
+async def _tts_async(task, project_id, narration_text, language, narrator_gender="woman"):
     from ..database import AsyncSessionLocal
     from ..models.generation_task import GenerationTask, TaskType, TaskStatus
     from ..services.elevenlabs_service import generate_voiceover as tts_gen, TTSError
@@ -56,7 +56,7 @@ async def _tts_async(task, project_id, narration_text, language):
         gt_id = gt.id
 
     try:
-        audio_bytes = await tts_gen(narration_text, language=language)
+        audio_bytes = await tts_gen(narration_text, language=language, narrator_gender=narrator_gender)
         await upload_bytes(r2_key, audio_bytes, content_type="audio/mpeg")
 
         async with AsyncSessionLocal() as db:

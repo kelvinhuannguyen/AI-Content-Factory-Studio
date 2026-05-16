@@ -149,6 +149,18 @@ async def _launch_async(task, project_id: str, music_key: str | None):
         language = proj.preferred_language if proj else "vi"
         aspect_ratio = "9:16" if proj and str(proj.production_type) == "short_video" else "16:9"
 
+        # Auto-detect narrator gender from main character (#CHAR_01)
+        from ..models.character import Character
+        from sqlalchemy import select as sa_select
+        char_result = await db.execute(
+            sa_select(Character)
+            .where(Character.project_id == pid, Character.variant_index == 0)
+            .order_by(Character.character_index)
+        )
+        main_char = char_result.scalars().first()
+        dna = main_char.physical_dna or {} if main_char else {}
+        narrator_gender = dna.get("gender", "woman").lower() if dna else "woman"
+
         # Update status
         if proj:
             proj.status = ProjectStatus.generating
@@ -174,7 +186,7 @@ async def _launch_async(task, project_id: str, music_key: str | None):
         for scene in scenes
     ]
 
-    tts_task = generate_voiceover.s(project_id, narration_text, language)
+    tts_task = generate_voiceover.s(project_id, narration_text, language, narrator_gender)
 
     all_tasks = video_tasks + [tts_task]
 

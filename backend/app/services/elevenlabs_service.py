@@ -66,9 +66,10 @@ def _split_text(text: str) -> list[str]:
 
 # ── Main entry ────────────────────────────────────────────────────────────────
 
-async def generate_voiceover(text: str, language: str = "vi") -> bytes:
+async def generate_voiceover(text: str, language: str = "vi", narrator_gender: str = "woman") -> bytes:
     """
     Generate TTS. Chain: FPT AI → MiniMax → ElevenLabs.
+    narrator_gender: "woman" | "man" — picks FPT voice automatically.
     Auto-chunks long text and concatenates MP3 bytes.
     """
     if not text.strip():
@@ -76,21 +77,21 @@ async def generate_voiceover(text: str, language: str = "vi") -> bytes:
 
     chunks = _split_text(text)
     if len(chunks) > 1:
-        logger.info("TTS: %d chars → %d chunks", len(text), len(chunks))
+        logger.info("TTS: %d chars → %d chunks (gender=%s)", len(text), len(chunks), narrator_gender)
 
     parts: list[bytes] = []
     for i, chunk in enumerate(chunks):
         logger.info("TTS chunk %d/%d (%d chars)", i + 1, len(chunks), len(chunk))
-        parts.append(await _generate_chunk(chunk, language))
+        parts.append(await _generate_chunk(chunk, language, narrator_gender))
 
     return b"".join(parts)
 
 
-async def _generate_chunk(text: str, language: str) -> bytes:
-    # 1. FPT AI — native Vietnamese, no accent issues
+async def _generate_chunk(text: str, language: str, narrator_gender: str = "woman") -> bytes:
+    # 1. FPT AI — native Vietnamese, auto voice by gender
     if language == "vi" and settings.fpt_tts_api_key:
         try:
-            return await _fpt_tts(text)
+            return await _fpt_tts(text, narrator_gender)
         except TTSError as e:
             logger.warning("FPT TTS failed: %s — trying MiniMax", e)
 
@@ -111,15 +112,22 @@ async def _generate_chunk(text: str, language: str) -> bytes:
 
 # ── FPT AI TTS ────────────────────────────────────────────────────────────────
 
-async def _fpt_tts(text: str) -> bytes:
+async def _fpt_tts(text: str, narrator_gender: str = "woman") -> bytes:
     """
     FPT AI TTS v5 — Vietnamese-native voices.
+    Auto-selects voice by gender: woman→banmai, man→leminh.
     Response: {"error": 0, "async": "<mp3_url>"}
     """
+    voice = (
+        settings.fpt_tts_voice_male_vi
+        if "man" in narrator_gender.lower()
+        else settings.fpt_tts_voice_vi
+    )
+    logger.info("FPT TTS: voice=%s (gender=%s)", voice, narrator_gender)
     headers = {
         "api-key": settings.fpt_tts_api_key,
-        "speed": "",          # empty = normal speed
-        "voice": settings.fpt_tts_voice_vi,
+        "speed": "",
+        "voice": voice,
     }
 
     async with httpx.AsyncClient(timeout=30) as client:
